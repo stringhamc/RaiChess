@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RaiChess</string>
+    <string name="app_name_kanji">来Chess</string>
+    <string name="app_tagline">The Next Chess App</string>
+    
+    <!-- Main Menu -->
+    <string name="new_game">New Game</string>
+    <string name="practice">Practice</string>
+    <string name="history">History</string>
+    <string name="statistics">Statistics</string>
+    
+    <!-- Game Screen -->
+    <string name="your_elo">Your ELO: %1$d</string>
+    <string name="opponent_elo">Opponent: %1$d</string>
+    <string name="move_number">Move %1$d</string>
+    <string name="evaluation">Eval: %1$s</string>
+    
+    <!-- Analysis -->
+    <string name="accuracy">Accuracy: %1$.1f%%</string>
+    <string name="mistakes">Mistakes: %1$d</string>
+    <string name="blunders">Blunders: %1$d</string>
+    <string name="good_moves">Good moves: %1$d</string>
+    
+    <!-- Practice -->
+    <string name="find_best_move">Find the best move</string>
+    <string name="hint">Hint</string>
+    <string name="submit">Submit</string>
+    <string name="streak">Streak: %1$d</string>
+    
+    <!-- Settings -->
+    <string name="settings">Settings</string>
+    <string name="about">About</string>
+    <string name="about_text">RaiChess (来Chess) - The Next Chess App\n\nRai (来) means \"next\" in Japanese, representing the next evolution in chess training.\n\nPowered by Stockfish</string>
+</resources>
