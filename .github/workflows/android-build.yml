@@ -1,0 +1,80 @@
+name: Android Build
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - '**.kt'
+      - '**.kts'
+      - '**.xml'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths:
+      - '**.kt'
+      - '**.kts'
+      - '**.xml'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+    - name: Build with Gradle
+      run: ./gradlew assembleDebug --stacktrace
+
+    - name: Run unit tests
+      run: ./gradlew testDebugUnitTest --stacktrace
+
+    - name: Upload build reports
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-reports
+        path: |
+          app/build/reports/
+          app/build/test-results/
+        retention-days: 7
+
+    - name: Upload APK
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 14
+
+    - name: Build summary
+      if: success()
+      run: |
+        APK_SIZE=$(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)
+        echo "### Build Successful! :rocket:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **APK Size:** $APK_SIZE" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Type:** Debug" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit:** \`${GITHUB_SHA:0:7}\`" >> $GITHUB_STEP_SUMMARY
