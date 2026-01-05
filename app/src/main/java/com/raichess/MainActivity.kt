@@ -18,6 +18,8 @@ import com.raichess.ui.theme.RaiChessTheme
 /**
  * Main Activity for RaiChess (来Chess)
  * Entry point for the application
+ *
+ * @version 1.0.0-alpha
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
