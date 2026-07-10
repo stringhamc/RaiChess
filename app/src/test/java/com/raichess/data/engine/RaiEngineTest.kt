@@ -99,6 +99,22 @@ class RaiEngineTest {
     }
 
     @Test
+    fun `weak engine varies its opening move across seeds`() {
+        // At low ELO the candidate window keeps several similarly-scored
+        // moves alive, so different seeds should produce different moves
+        val chosen = mutableSetOf<String>()
+        for (seed in 0..20) {
+            val board = Board()
+            val engine = RaiEngine(targetElo = 900, random = Random(seed))
+            chosen.add(checkNotNull(engine.selectMove(board)).toString())
+        }
+        assertTrue(
+            "a weak engine should not play deterministically, got $chosen",
+            chosen.size > 1
+        )
+    }
+
+    @Test
     fun `weak engine still plays legal moves`() {
         val board = Board()
         val engine = RaiEngine(targetElo = 800, random = Random(99))

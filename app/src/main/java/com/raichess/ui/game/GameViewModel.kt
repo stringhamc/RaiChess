@@ -33,6 +33,9 @@ enum class GamePhase { SETUP, PLAYING, GAME_OVER }
 /** How the game ended, from the player's perspective. */
 enum class GameEnding { CHECKMATE_WIN, CHECKMATE_LOSS, DRAW, RESIGNED }
 
+/** The most recent move, as board indices (a1=0 .. h8=63). */
+data class LastMove(val from: Int, val to: Int)
+
 data class GameUiState(
     val phase: GamePhase = GamePhase.SETUP,
     val playerStats: EloStats? = null,
@@ -42,7 +45,7 @@ data class GameUiState(
     val squares: List<Char?> = emptyList(),
     val selectedSquare: Int? = null,
     val legalTargets: Set<Int> = emptySet(),
-    val lastMove: Pair<Int, Int>? = null,
+    val lastMove: LastMove? = null,
     val moveHistorySan: List<String> = emptyList(),
     val isPlayerTurn: Boolean = false,
     val isAiThinking: Boolean = false,
@@ -195,7 +198,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             squares = boardSnapshot(),
             selectedSquare = null,
             legalTargets = emptySet(),
-            lastMove = move.from.ordinal to move.to.ordinal,
+            lastMove = LastMove(move.from.ordinal, move.to.ordinal),
             moveHistorySan = sanHistory(),
             isPlayerInCheck = isPlayerInCheck()
         )
@@ -267,6 +270,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         return board.sideToMove == playerSide && board.isKingAttacked
     }
 
+    // O(moves) per call since toSanArray re-encodes the full list; fine at
+    // one call per ply for normal game lengths, don't reuse in hot paths
     private fun sanHistory(): List<String> = try {
         moveList.toSanArray().toList()
     } catch (e: MoveConversionException) {

@@ -102,7 +102,7 @@ fun ChessBoard(
     squares: List<Char?>,
     selectedSquare: Int?,
     legalTargets: Set<Int>,
-    lastMove: Pair<Int, Int>?,
+    lastMove: LastMove?,
     flipped: Boolean,
     onSquareTapped: (Int) -> Unit
 ) {
@@ -124,7 +124,7 @@ fun ChessBoard(
                         isLight = (rank + file) % 2 == 1,
                         isSelected = index == selectedSquare,
                         isLegalTarget = index in legalTargets,
-                        isLastMove = lastMove?.let { index == it.first || index == it.second }
+                        isLastMove = lastMove?.let { index == it.from || index == it.to }
                             ?: false,
                         onTap = { onSquareTapped(index) },
                         modifier = Modifier
