@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.raichess.data.engine.RaiEngine
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.PlayerColor
+import kotlin.math.roundToInt
 
 /**
  * Home / new-game setup screen: player rating summary, opponent
@@ -85,7 +86,7 @@ fun HomeScreen(
         )
         Slider(
             value = opponentElo.toFloat(),
-            onValueChange = { onOpponentEloChanged((it / 50).toInt() * 50) },
+            onValueChange = { onOpponentEloChanged((it / 50f).roundToInt() * 50) },
             valueRange = RaiEngine.MIN_ELO.toFloat()..RaiEngine.MAX_ELO.toFloat(),
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,

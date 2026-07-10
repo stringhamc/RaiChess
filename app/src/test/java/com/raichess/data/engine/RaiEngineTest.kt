@@ -80,6 +80,25 @@ class RaiEngineTest {
     }
 
     @Test
+    fun `weak engine deviates from the best move on some seeds`() {
+        // Hanging queen: the objectively best move is c4xd5. An 800-ELO
+        // engine blunders 30% of the time, so across many seeds it must
+        // sometimes play something else.
+        var deviated = false
+        for (seed in 0..40) {
+            val board = Board()
+            board.loadFromFen("rnb1kbnr/ppp1pppp/8/3q4/2P5/8/PP1PPPPP/RNBQKBNR w KQkq - 0 3")
+            val engine = RaiEngine(targetElo = 800, random = Random(seed))
+            val move = checkNotNull(engine.selectMove(board))
+            if (move.toString() != "c4d5") {
+                deviated = true
+                break
+            }
+        }
+        assertTrue("an 800-ELO engine should not always find the best move", deviated)
+    }
+
+    @Test
     fun `weak engine still plays legal moves`() {
         val board = Board()
         val engine = RaiEngine(targetElo = 800, random = Random(99))

@@ -60,13 +60,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var gameRecorded = false
     private var gameId = 0
 
-    private val _uiState = MutableStateFlow(GameUiState(playerStats = repository.getStats()))
+    private val _uiState = MutableStateFlow(
+        repository.getStats().let { stats ->
+            GameUiState(
+                playerStats = stats,
+                // Seed the setup screen with the recommended opponent strength
+                opponentElo = EloConfiguration.getRecommendedOpponentElo(stats.currentElo)
+            )
+        }
+    )
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
-
-    val recommendedOpponentElo: Int
-        get() = EloConfiguration.getRecommendedOpponentElo(
-            repository.getStats().currentElo
-        )
 
     fun setOpponentElo(elo: Int) {
         _uiState.value = _uiState.value.copy(
