@@ -159,6 +159,8 @@ class RaiEngine(
     }
 
     companion object {
+        // Selectable opponent strength range; intentionally narrower than
+        // EloCalculator's 400-3000, which bounds the player's own rating
         const val MIN_ELO = 800
         const val MAX_ELO = 2800
         private const val INFINITY = 1_000_000

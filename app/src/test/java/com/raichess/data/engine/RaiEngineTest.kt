@@ -37,6 +37,16 @@ class RaiEngineTest {
     }
 
     @Test
+    fun `stalemate is a draw with no legal moves`() {
+        val board = Board()
+        // Classic queen stalemate: black to move, not in check, no legal moves
+        board.loadFromFen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1")
+        assertTrue("stalemate should register as a draw", board.isDraw)
+        assertTrue("stalemate is not checkmate", !board.isMated)
+        assertNull(RaiEngine(targetElo = 1500).selectMove(board))
+    }
+
+    @Test
     fun `strong engine finds mate in one`() {
         val board = Board()
         // Back-rank mate available: Ra8#
