@@ -3,7 +3,6 @@ package com.raichess
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -11,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raichess.ui.game.GamePhase
 import com.raichess.ui.game.GameScreen
 import com.raichess.ui.game.GameViewModel
@@ -24,9 +24,6 @@ import com.raichess.ui.theme.RaiChessTheme
  * @version 1.0.0-alpha
  */
 class MainActivity : ComponentActivity() {
-
-    private val viewModel: GameViewModel by viewModels()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -35,7 +32,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RaiChessApp(viewModel)
+                    RaiChessApp()
                 }
             }
         }
@@ -43,7 +40,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun RaiChessApp(viewModel: GameViewModel) {
+fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
 
     when (state.phase) {
