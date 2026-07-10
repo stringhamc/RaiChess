@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fallback launcher icon for API 24-25 (pre-adaptive-icon):
+     black tile with a white 2x2 checkerboard -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M0,0 h108 v108 h-108 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,30 h24 v24 h-24 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,54 h24 v24 h-24 z" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M30,30 h48 v48 h-48 z" />
+</vector>
