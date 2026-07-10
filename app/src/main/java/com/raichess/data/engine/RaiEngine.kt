@@ -3,6 +3,7 @@ package com.raichess.data.engine
 import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.Piece
 import com.github.bhlangonijr.chesslib.PieceType
+import com.github.bhlangonijr.chesslib.Side
 import com.github.bhlangonijr.chesslib.Square
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
@@ -70,12 +71,17 @@ class RaiEngine(
             return legalMoves[random.nextInt(legalMoves.size)]
         }
 
+        // Root alpha is kept candidateWindow below the best score seen, so
+        // pruning never discards a move that could still land in the
+        // near-best candidate set used for weaker-ELO move selection
+        var alpha = -INFINITY
         val scored = legalMoves
             .sortedByDescending { captureValue(board, it) }
             .map { move ->
                 board.doMove(move)
-                val score = -negamax(board, searchDepth - 1, -INFINITY, INFINITY, 1)
+                val score = -negamax(board, searchDepth - 1, -INFINITY, -alpha, 1)
                 board.undoMove()
+                alpha = max(alpha, score - candidateWindow)
                 move to score
             }
 
@@ -118,7 +124,7 @@ class RaiEngine(
             var value = pieceValue(type)
 
             // Positional bonus from piece-square tables (white perspective tables)
-            val tableIndex = if (side == com.github.bhlangonijr.chesslib.Side.WHITE) {
+            val tableIndex = if (side == Side.WHITE) {
                 // Tables are listed rank 8 first; square index 0 is a1
                 (7 - index / 8) * 8 + index % 8
             } else {

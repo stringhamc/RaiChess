@@ -9,6 +9,7 @@ import com.github.bhlangonijr.chesslib.PieceType
 import com.github.bhlangonijr.chesslib.Side
 import com.github.bhlangonijr.chesslib.Square
 import com.github.bhlangonijr.chesslib.move.Move
+import com.github.bhlangonijr.chesslib.move.MoveConversionException
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.github.bhlangonijr.chesslib.move.MoveList
 import com.raichess.data.engine.RaiEngine
@@ -53,7 +54,7 @@ data class GameUiState(
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PlayerProfileRepository(application)
-    private val board = Board()
+    private var board = Board()
     private var moveList = MoveList()
     private var engine: RaiEngine? = null
     private var gameRecorded = false
@@ -85,7 +86,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             state.playerColor
         }
 
-        board.loadFromFen(START_FEN)
+        // Fresh Board per game: a stale AI search from a previous game can
+        // never touch the live board even if it is still running
+        board = Board()
         moveList = MoveList()
         engine = RaiEngine(state.opponentElo)
         gameRecorded = false
@@ -156,14 +159,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun makeAiMove() {
         val currentEngine = engine ?: return
         val currentGameId = gameId
+        // Snapshot the position so the background search never touches the
+        // live board (resign/new-game can mutate it mid-search otherwise)
+        val positionFen = board.fen
         _uiState.value = _uiState.value.copy(isAiThinking = true, isPlayerTurn = false)
 
         viewModelScope.launch {
+            val startedAt = System.currentTimeMillis()
             val move = withContext(Dispatchers.Default) {
-                currentEngine.selectMove(board)
+                val searchBoard = Board().apply { loadFromFen(positionFen) }
+                currentEngine.selectMove(searchBoard)
             }
-            // Brief pause so instant replies still read as a "thinking" opponent
-            delay(MIN_AI_MOVE_DELAY_MS)
+            // Pause so instant replies still read as a "thinking" opponent,
+            // as a floor on total time rather than an added delay
+            val elapsed = System.currentTimeMillis() - startedAt
+            if (elapsed < MIN_AI_MOVE_DELAY_MS) delay(MIN_AI_MOVE_DELAY_MS - elapsed)
             // Bail out if the game ended or a new game started while searching
             if (_uiState.value.phase != GamePhase.PLAYING || gameId != currentGameId) return@launch
             if (move != null) {
@@ -256,7 +266,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun sanHistory(): List<String> = try {
         moveList.toSanArray().toList()
-    } catch (e: Exception) {
+    } catch (e: MoveConversionException) {
         // Fall back to coordinate notation if SAN conversion fails
         moveList.map { it.toString() }
     }
@@ -276,8 +286,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        private const val START_FEN =
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         private const val MIN_AI_MOVE_DELAY_MS = 350L
     }
 }
