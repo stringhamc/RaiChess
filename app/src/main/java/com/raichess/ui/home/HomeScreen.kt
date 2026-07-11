@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,20 +23,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.raichess.data.engine.RaiEngine
 import com.raichess.domain.model.EloStats
+import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.PlayerColor
 import kotlin.math.roundToInt
 
 /**
  * Home / new-game setup screen: player rating summary, opponent
- * strength selection, color choice, and start button.
+ * strength selection, game mode, color choice, and start button.
  */
 @Composable
 fun HomeScreen(
     stats: EloStats?,
     opponentElo: Int,
     playerColor: PlayerColor,
+    gameMode: GameMode,
+    animationsEnabled: Boolean,
     onOpponentEloChanged: (Int) -> Unit,
     onPlayerColorChanged: (PlayerColor) -> Unit,
+    onGameModeChanged: (GameMode) -> Unit,
+    onAnimationsChanged: (Boolean) -> Unit,
     onStartGame: (randomColor: Boolean) -> Unit
 ) {
     Column(
@@ -70,14 +77,42 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
+            val undoSuffix = if (stats.totalUndos > 0) " · ${stats.totalUndos} undos" else ""
             Text(
-                text = "${stats.wins}W · ${stats.draws}D · ${stats.losses}L",
+                text = "${stats.wins}W · ${stats.draws}D · ${stats.losses}L$undoSuffix",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Text(
+            text = "Mode",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ColorChoiceButton("Rated", gameMode == GameMode.RATED) {
+                onGameModeChanged(GameMode.RATED)
+            }
+            ColorChoiceButton("Training", gameMode == GameMode.TRAINING) {
+                onGameModeChanged(GameMode.TRAINING)
+            }
+        }
+        Text(
+            text = if (gameMode == GameMode.TRAINING) {
+                "Undo allowed — undos are tracked and reduce ELO gains"
+            } else {
+                "No takebacks — full ELO stakes"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(
             text = "Opponent: $opponentElo ELO",
@@ -113,7 +148,38 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Move animation",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "150 ms slide · off by default",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            Switch(
+                checked = animationsEnabled,
+                onCheckedChange = onAnimationsChanged,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = Color(0xFF555555),
+                    uncheckedThumbColor = Color(0xFF888888),
+                    uncheckedTrackColor = Color(0xFF222222)
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = { onStartGame(false) },

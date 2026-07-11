@@ -1,10 +1,16 @@
 package com.raichess.ui.game
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +18,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -21,37 +28,56 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.raichess.domain.model.GameMode
+import com.raichess.domain.model.MaterialCalculator
 import com.raichess.domain.model.PlayerColor
 import com.raichess.ui.theme.ChessColors
-import com.raichess.ui.theme.ChessPieceSymbols
+import kotlin.math.roundToInt
 
 /**
- * The main game screen: board, status, move list, and controls.
+ * The main game screen: board, status, captured material, move list,
+ * and controls.
  */
 @Composable
 fun GameScreen(
     state: GameUiState,
     onSquareTapped: (Int) -> Unit,
+    onUndo: () -> Unit,
     onResign: () -> Unit,
     onNewGame: () -> Unit
 ) {
+    val flipped = state.playerColor == PlayerColor.BLACK
+    val material = remember(state.squares) { MaterialCalculator.compute(state.squares) }
+    val playerIsWhite = state.playerColor == PlayerColor.WHITE
+    // Positive = the player is ahead on material
+    val playerDiff = if (playerIsWhite) material.diff else -material.diff
+    val opponentCaptures =
+        if (playerIsWhite) material.capturedWhitePieces else material.capturedBlackPieces
+    val playerCaptures =
+        if (playerIsWhite) material.capturedBlackPieces else material.capturedWhitePieces
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Opponent info
         Text(
-            text = "RaiEngine · ${state.opponentElo} ELO",
+            text = "RaiEngine · ${state.opponentElo} ELO" +
+                if (state.gameMode == GameMode.TRAINING) " · Training" else "",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
@@ -59,19 +85,20 @@ fun GameScreen(
             text = statusText(state),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.padding(vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 6.dp)
         )
 
-        ChessBoard(
-            squares = state.squares,
-            selectedSquare = state.selectedSquare,
-            legalTargets = state.legalTargets,
-            lastMove = state.lastMove,
-            flipped = state.playerColor == PlayerColor.BLACK,
+        CapturedRow(pieces = opponentCaptures, advantage = -playerDiff)
+
+        AnimatedChessBoard(
+            state = state,
+            flipped = flipped,
             onSquareTapped = onSquareTapped
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        CapturedRow(pieces = playerCaptures, advantage = playerDiff)
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         MoveHistory(
             moves = state.moveHistorySan,
@@ -85,6 +112,11 @@ fun GameScreen(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             if (state.phase == GamePhase.PLAYING) {
+                if (state.gameMode == GameMode.TRAINING) {
+                    OutlinedButton(onClick = onUndo, enabled = state.canUndo) {
+                        Text(if (state.undoCount > 0) "Undo (${state.undoCount})" else "Undo")
+                    }
+                }
                 OutlinedButton(onClick = onResign) {
                     Text("Resign")
                 }
@@ -97,35 +129,128 @@ fun GameScreen(
     }
 }
 
+/**
+ * Board with an optional slide-animation overlay. When animations are
+ * disabled (the default) the overlay layer is not composed at all and the
+ * board renders instantly, exactly as before.
+ */
+@Composable
+private fun AnimatedChessBoard(
+    state: GameUiState,
+    flipped: Boolean,
+    onSquareTapped: (Int) -> Unit
+) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+    ) {
+        val squareSize = maxWidth / 8
+        val squareSizePx = with(LocalDensity.current) { squareSize.toPx() }
+
+        fun offsetOf(index: Int): Offset {
+            val file = index % 8
+            val rank = index / 8
+            val col = if (flipped) 7 - file else file
+            val row = if (flipped) rank else 7 - rank
+            return Offset(col * squareSizePx, row * squareSizePx)
+        }
+
+        var hiddenSquare by remember { mutableStateOf<Int?>(null) }
+        val slide = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+
+        if (state.animationsEnabled) {
+            // moveSeq increments only when a move is applied — undo and new
+            // game never animate. Known cosmetic limits: on castling only
+            // the king slides; an en-passant victim disappears at start.
+            LaunchedEffect(state.moveSeq) {
+                val lastMove = state.lastMove
+                if (state.moveSeq > 0 && lastMove != null) {
+                    hiddenSquare = lastMove.to
+                    slide.snapTo(offsetOf(lastMove.from))
+                    slide.animateTo(
+                        offsetOf(lastMove.to),
+                        tween(durationMillis = 150, easing = LinearOutSlowInEasing)
+                    )
+                    hiddenSquare = null
+                }
+            }
+        }
+
+        ChessBoard(
+            squares = state.squares,
+            selectedSquare = state.selectedSquare,
+            legalTargets = state.legalTargets,
+            lastMove = state.lastMove,
+            checkedKingSquare = if (state.isPlayerInCheck) {
+                findKingSquare(state.squares, state.playerColor)
+            } else {
+                null
+            },
+            hiddenSquare = if (state.animationsEnabled) hiddenSquare else null,
+            flipped = flipped,
+            onSquareTapped = onSquareTapped
+        )
+
+        if (state.animationsEnabled) {
+            val hidden = hiddenSquare
+            val piece = hidden?.let { state.squares.getOrNull(it) }
+            if (piece != null) {
+                Image(
+                    painter = painterResource(ChessPieceIcons.forChar(piece)),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(squareSize)
+                        .offset {
+                            IntOffset(
+                                slide.value.x.roundToInt(),
+                                slide.value.y.roundToInt()
+                            )
+                        }
+                        .padding(squareSize * 0.075f)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun ChessBoard(
     squares: List<Char?>,
     selectedSquare: Int?,
     legalTargets: Set<Int>,
     lastMove: LastMove?,
+    checkedKingSquare: Int?,
+    hiddenSquare: Int?,
     flipped: Boolean,
     onSquareTapped: (Int) -> Unit
 ) {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .border(2.dp, ChessColors.SquareBorder)
+            .fillMaxSize()
+            .border(1.5.dp, ChessColors.SquareBorder)
+            .padding(3.dp)
     ) {
-        // Draw rank 8 at the top for white, rank 1 at the top when flipped
+        // Rank 8 at the top for white, rank 1 at the top when flipped
         val ranks = if (flipped) 0..7 else 7 downTo 0
         for (rank in ranks) {
             Row(modifier = Modifier.weight(1f)) {
                 val files = if (flipped) 7 downTo 0 else 0..7
                 for (file in files) {
                     val index = rank * 8 + file
+                    val isBottomRow = rank == if (flipped) 7 else 0
+                    val isLeftColumn = file == if (flipped) 7 else 0
                     BoardSquare(
-                        piece = squares.getOrNull(index),
+                        piece = if (index == hiddenSquare) null else squares.getOrNull(index),
                         isLight = (rank + file) % 2 == 1,
                         isSelected = index == selectedSquare,
                         isLegalTarget = index in legalTargets,
+                        isCaptureTarget = index in legalTargets && squares.getOrNull(index) != null,
                         isLastMove = lastMove?.let { index == it.from || index == it.to }
                             ?: false,
+                        isCheckedKing = index == checkedKingSquare,
+                        fileLabel = if (isBottomRow) ('a' + file) else null,
+                        rankLabel = if (isLeftColumn) ('1' + rank) else null,
                         onTap = { onSquareTapped(index) },
                         modifier = Modifier
                             .weight(1f)
@@ -143,7 +268,11 @@ private fun BoardSquare(
     isLight: Boolean,
     isSelected: Boolean,
     isLegalTarget: Boolean,
+    isCaptureTarget: Boolean,
     isLastMove: Boolean,
+    isCheckedKing: Boolean,
+    fileLabel: Char?,
+    rankLabel: Char?,
     onTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -152,43 +281,98 @@ private fun BoardSquare(
         isLight -> ChessColors.LightSquare
         else -> ChessColors.DarkSquare
     }
+    val labelColor = if (isLight) ChessColors.DarkSquare else ChessColors.LightSquare
 
     Box(
         modifier = modifier
             .background(background)
-            .border(0.5.dp, ChessColors.SquareBorder)
-            .clickable(onClick = onTap),
-        contentAlignment = Alignment.Center
+            .clickable(onClick = onTap)
     ) {
         if (isLastMove && !isSelected) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0x55888888))
+                    .background(ChessColors.LastMove)
+            )
+        }
+        if (isCheckedKing) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .border(2.5.dp, labelColor)
+            )
+        }
+        rankLabel?.let {
+            Text(
+                text = it.toString(),
+                fontSize = 9.sp,
+                color = labelColor,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 2.dp)
+            )
+        }
+        fileLabel?.let {
+            Text(
+                text = it.toString(),
+                fontSize = 9.sp,
+                color = labelColor,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 2.dp)
             )
         }
         if (piece != null) {
-            val isWhitePiece = piece.isUpperCase()
-            Text(
-                text = ChessPieceSymbols.getSymbol(piece),
-                fontSize = 32.sp,
-                textAlign = TextAlign.Center,
-                color = if (isWhitePiece) ChessColors.WhitePiece else ChessColors.BlackPiece,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    // Shadow keeps pieces visible on same-color squares
-                    shadow = Shadow(
-                        color = if (isWhitePiece) Color.Black else Color.White,
-                        offset = Offset(0f, 0f),
-                        blurRadius = 6f
-                    )
-                )
+            Image(
+                painter = painterResource(ChessPieceIcons.forChar(piece)),
+                contentDescription = ChessPieceIcons.contentDescription(piece),
+                modifier = Modifier
+                    .fillMaxSize(0.85f)
+                    .align(Alignment.Center)
             )
         }
         if (isLegalTarget) {
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .background(ChessColors.LegalMoveIndicator, CircleShape)
+            if (isCaptureTarget) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(0.9f)
+                        .align(Alignment.Center)
+                        .border(2.dp, ChessColors.LegalMoveIndicator, CircleShape)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(0.25f)
+                        .align(Alignment.Center)
+                        .background(ChessColors.LegalMoveIndicator, CircleShape)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CapturedRow(pieces: List<Char>, advantage: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(20.dp)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        pieces.forEach { piece ->
+            Image(
+                painter = painterResource(ChessPieceIcons.forChar(piece)),
+                contentDescription = ChessPieceIcons.contentDescription(piece),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        if (advantage > 0) {
+            Text(
+                text = "+$advantage",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(start = 4.dp)
             )
         }
     }
@@ -207,21 +391,30 @@ private fun MoveHistory(moves: List<String>, modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.secondary,
         modifier = modifier
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 8.dp)
+            .padding(vertical = 6.dp)
     )
 }
 
-private fun statusText(state: GameUiState): String = when {
-    state.ending != null -> when (state.ending) {
-        GameEnding.CHECKMATE_WIN -> "Checkmate — you win!" + eloDeltaText(state)
-        GameEnding.CHECKMATE_LOSS -> "Checkmate — you lose." + eloDeltaText(state)
-        GameEnding.DRAW -> "Draw." + eloDeltaText(state)
-        GameEnding.RESIGNED -> "You resigned." + eloDeltaText(state)
+private fun findKingSquare(squares: List<Char?>, playerColor: PlayerColor): Int? {
+    val king = if (playerColor == PlayerColor.WHITE) 'K' else 'k'
+    val index = squares.indexOf(king)
+    return if (index >= 0) index else null
+}
+
+private fun statusText(state: GameUiState): String {
+    val moveNumber = state.moveHistorySan.size / 2 + 1
+    return when {
+        state.ending != null -> when (state.ending) {
+            GameEnding.CHECKMATE_WIN -> "Checkmate — you win!" + eloDeltaText(state)
+            GameEnding.CHECKMATE_LOSS -> "Checkmate — you lose." + eloDeltaText(state)
+            GameEnding.DRAW -> "Draw." + eloDeltaText(state)
+            GameEnding.RESIGNED -> "You resigned." + eloDeltaText(state)
+        }
+        state.isAiThinking -> "Move $moveNumber · RaiEngine is thinking…"
+        state.isPlayerInCheck -> "Move $moveNumber · Check!"
+        state.isPlayerTurn -> "Move $moveNumber · Your move"
+        else -> ""
     }
-    state.isAiThinking -> "RaiEngine is thinking…"
-    state.isPlayerInCheck -> "Check! Your move."
-    state.isPlayerTurn -> "Your move"
-    else -> ""
 }
 
 private fun eloDeltaText(state: GameUiState): String {

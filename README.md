@@ -20,6 +20,9 @@ An offline-first Android chess application with Stockfish AI, ELO-based difficul
 - Dynamic opponent strength from 800-2800+ ELO
 - Personal ELO rating that evolves with your play
 - Accurate rating calculation based on results and move accuracy
+- Rated mode (no takebacks) or Training mode: undo is allowed but
+  tracked — each undo marks a position you misjudged, feeds the
+  practice queue, and trims your ELO gain
 
 🤖 **Stockfish AI Engine**
 - World-class chess engine (3500+ ELO) at full strength
@@ -230,7 +233,7 @@ Contributions are welcome! Please follow these guidelines:
 - [ ] Opening recognition
 
 ### Phase 3: Practice (Weeks 10-12)
-- [ ] Position extraction
+- [x] Position extraction (mistake positions captured from Training-mode undos; analysis-based extraction pending)
 - [ ] Practice mode UI
 - [ ] Spaced repetition
 - [ ] Progress tracking

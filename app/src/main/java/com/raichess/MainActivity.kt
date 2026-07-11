@@ -48,14 +48,19 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             stats = state.playerStats,
             opponentElo = state.opponentElo,
             playerColor = state.playerColor,
+            gameMode = state.gameMode,
+            animationsEnabled = state.animationsEnabled,
             onOpponentEloChanged = viewModel::setOpponentElo,
             onPlayerColorChanged = viewModel::setPlayerColor,
+            onGameModeChanged = viewModel::setGameMode,
+            onAnimationsChanged = viewModel::setAnimationsEnabled,
             onStartGame = viewModel::startGame
         )
 
         GamePhase.PLAYING, GamePhase.GAME_OVER -> GameScreen(
             state = state,
             onSquareTapped = viewModel::onSquareTapped,
+            onUndo = viewModel::undoMove,
             onResign = viewModel::resign,
             onNewGame = viewModel::backToSetup
         )

@@ -233,7 +233,9 @@ data class EloStats(
     val wins: Int,
     val losses: Int,
     val draws: Int,
-    val confidenceInterval: Int
+    val confidenceInterval: Int,
+    /** Lifetime Training-mode undos; a rough blunder-awareness signal. */
+    val totalUndos: Int = 0
 ) {
     val winRate: Double
         get() = if (gamesPlayed > 0) wins.toDouble() / gamesPlayed * 100.0 else 0.0

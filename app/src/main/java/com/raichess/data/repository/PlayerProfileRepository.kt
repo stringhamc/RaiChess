@@ -26,8 +26,16 @@ class PlayerProfileRepository(context: Context) {
             wins = prefs.getInt(KEY_WINS, 0),
             losses = prefs.getInt(KEY_LOSSES, 0),
             draws = prefs.getInt(KEY_DRAWS, 0),
-            confidenceInterval = EloCalculator.getConfidenceInterval(gamesPlayed)
+            confidenceInterval = EloCalculator.getConfidenceInterval(gamesPlayed),
+            totalUndos = prefs.getInt(KEY_TOTAL_UNDOS, 0)
         )
+    }
+
+    /** Lifetime count of Training-mode undos, a rough blunder-awareness signal. */
+    fun incrementLifetimeUndos() {
+        prefs.edit()
+            .putInt(KEY_TOTAL_UNDOS, prefs.getInt(KEY_TOTAL_UNDOS, 0) + 1)
+            .apply()
     }
 
     /**
@@ -71,5 +79,6 @@ class PlayerProfileRepository(context: Context) {
         private const val KEY_WINS = "wins"
         private const val KEY_LOSSES = "losses"
         private const val KEY_DRAWS = "draws"
+        private const val KEY_TOTAL_UNDOS = "total_undos"
     }
 }
