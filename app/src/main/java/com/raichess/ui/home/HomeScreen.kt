@@ -162,7 +162,7 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "150 ms slide · off by default",
+                    text = "150 ms slide · on by default",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )

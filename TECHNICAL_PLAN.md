@@ -697,7 +697,7 @@ val chessPieces = mapOf(
 ### Interaction Design
 - **Tap to select:** Piece glows with gray selection
 - **Legal moves:** Small gray dots on legal squares
-- **Move animation:** Instant by default (no fade/slide to save power); an opt-in setting enables a 150 ms slide
+- **Move animation:** 150 ms slide, on by default; a setting can turn it off (instant transitions) to save power
 - **Sound:** Optional clicks (disabled by default for power)
 
 ### Power Saving Features

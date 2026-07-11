@@ -230,8 +230,8 @@ fun ChessBoard(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .border(1.5.dp, ChessColors.SquareBorder)
-            .padding(3.dp)
+            .border(2.dp, ChessColors.SquareBorder)
+            .padding(2.dp)
     ) {
         // Rank 8 at the top for white, rank 1 at the top when flipped
         val ranks = if (flipped) 0..7 else 7 downTo 0

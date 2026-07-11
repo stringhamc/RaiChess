@@ -14,12 +14,9 @@ class SettingsRepository(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    /**
-     * Move animations are an explicit opt-in: the brand default is
-     * instant transitions (see BRANDING.md).
-     */
+    /** Move animations are on by default; players can turn them off. */
     var animationsEnabled: Boolean
-        get() = prefs.getBoolean(KEY_ANIMATIONS, false)
+        get() = prefs.getBoolean(KEY_ANIMATIONS, true)
         set(value) {
             prefs.edit().putBoolean(KEY_ANIMATIONS, value).apply()
         }

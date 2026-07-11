@@ -182,8 +182,11 @@ White kanji & chess piece
 - Light squares: #E3E3E3 (softened from pure white for piece legibility)
 - Dark squares: #3D3D3D (softened from pure black for piece legibility)
 - Gray board frame (#888888)
-- No shadows or 3D effects
-- Pieces use two-tone vector drawables (white fill / black outline and vice versa)
+- Pieces use two-tone vector drawables (white fill / black outline and vice
+  versa) with a baked soft drop shadow for depth and to keep white pieces
+  legible on the light squares — the shadow is pure vector (no raster
+  assets, negligible size). This is a deliberate, contained relaxation of
+  the earlier "no shadows" rule, limited to the pieces on the board.
 
 ### Button Style
 
