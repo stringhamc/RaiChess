@@ -141,7 +141,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             ending = null,
             eloDelta = null,
             undoCount = 0,
-            canUndo = false
+            canUndo = false,
+            moveSeq = 0
         )
 
         if (color == PlayerColor.BLACK) {

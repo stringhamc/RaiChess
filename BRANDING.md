@@ -52,9 +52,16 @@
 ### Primary Colors (OLED Optimized)
 
 ```
-Pure Black:    #000000  ■  (OLED power saving)
-Pure White:    #FFFFFF  □  (Maximum contrast)
+Pure Black:    #000000  ■  (Background — OLED power saving)
+Pure White:    #FFFFFF  □  (Text, UI — Maximum contrast)
 ```
+
+The app background stays pure black for OLED power savings. The **board
+squares** are the one deliberate exception: they use softened grays
+(dark #3D3D3D / light #E3E3E3) so the two-tone outlined vector pieces
+stay legible on either color. The board is bounded and the surrounding
+UI remains pure black, so the power impact is small and the legibility
+gain is worth it.
 
 ### Accent Colors (Minimal Use)
 
@@ -172,11 +179,11 @@ White kanji & chess piece
 ```
 
 **Features:**
-- White squares: #FFFFFF
-- Black squares: #000000
-- 1px gray border between squares (#666666)
+- Light squares: #E3E3E3 (softened from pure white for piece legibility)
+- Dark squares: #3D3D3D (softened from pure black for piece legibility)
+- Gray board frame (#888888)
 - No shadows or 3D effects
-- Pieces use Unicode symbols
+- Pieces use two-tone vector drawables (white fill / black outline and vice versa)
 
 ### Button Style
 

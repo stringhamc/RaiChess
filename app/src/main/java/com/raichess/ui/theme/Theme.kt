@@ -63,12 +63,6 @@ object ChessColors {
     val SelectedSquare = Color(0xFF8F8F8F)
     val LegalMoveIndicator = Color(0xFF8F8F8F)
     val LastMove = Color(0x559F9F9F)
-    val CheckHighlight = Color(0xFFAAAAAA)
-
-    // Pieces (using high contrast)
-    val WhitePiece = Color(0xFFFFFFFF)
-    val BlackPiece = Color(0xFF000000)
-    val PieceOutline = Color(0xFF888888)
 
     // Evaluation colors (grayscale)
     val EvalPositive = Color(0xFFCCCCCC) // Light gray for advantage

@@ -161,8 +161,10 @@ private fun AnimatedChessBoard(
 
         if (state.animationsEnabled) {
             // moveSeq increments only when a move is applied — undo and new
-            // game never animate. Known cosmetic limits: on castling only
-            // the king slides; an en-passant victim disappears at start.
+            // game never animate. Known cosmetic limits (all invisible when
+            // the toggle is off): on castling only the king slides; an
+            // en-passant victim disappears at start; a promoting pawn slides
+            // as the promoted piece, since squares[to] is already the queen.
             LaunchedEffect(state.moveSeq) {
                 val lastMove = state.lastMove
                 if (state.moveSeq > 0 && lastMove != null) {
