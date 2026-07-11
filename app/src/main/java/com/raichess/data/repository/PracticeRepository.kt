@@ -3,7 +3,7 @@ package com.raichess.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
+import com.google.gson.JsonParseException
 import com.google.gson.reflect.TypeToken
 import com.raichess.domain.model.PracticeCategory
 import com.raichess.domain.model.PracticePosition
@@ -29,7 +29,9 @@ class PracticeRepository(context: Context) {
         val json = prefs.getString(KEY_POSITIONS, null) ?: return emptyList()
         return try {
             gson.fromJson<List<PracticePosition>>(json, listType) ?: emptyList()
-        } catch (e: JsonSyntaxException) {
+        } catch (e: JsonParseException) {
+            // Fail closed on any corrupt/incompatible persisted JSON so a
+            // bad prefs blob can't crash the setup screen on load
             emptyList()
         }
     }

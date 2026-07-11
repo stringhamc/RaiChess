@@ -175,6 +175,12 @@ private fun AnimatedChessBoard(
                         tween(durationMillis = 150, easing = LinearOutSlowInEasing)
                     )
                     hiddenSquare = null
+                } else {
+                    // moveSeq reset to 0 (new game) cancels any in-flight
+                    // animation before its hiddenSquare = null runs; clear it
+                    // here so a stale hidden square can't blank a square in
+                    // the new game
+                    hiddenSquare = null
                 }
             }
         }

@@ -39,6 +39,10 @@ object MaterialCalculator {
         // capture, so count net promotions (pieces above their starting
         // number) and discount that many "missing" pawns — otherwise the
         // captured row shows a phantom pawn for the promoting side.
+        // Known limitation: if a promoted piece is later captured, the
+        // promotion signal disappears (counts look normal) and that capture
+        // shows as a phantom missing pawn. Count-based inference can't
+        // resolve this; the numeric material diff stays correct regardless.
         val promotions = listOf('q', 'r', 'b', 'n').sumOf { type ->
             val piece = if (white) type.uppercaseChar() else type
             ((counts[piece] ?: 0) - INITIAL_COUNTS.getValue(type)).coerceAtLeast(0)
