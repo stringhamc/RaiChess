@@ -85,6 +85,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 playerStats = stats,
                 // Seed the setup screen with the recommended opponent strength
                 opponentElo = EloConfiguration.getRecommendedOpponentElo(stats.currentElo),
+                gameMode = settingsRepository.gameMode,
                 animationsEnabled = settingsRepository.animationsEnabled
             )
         }
@@ -102,6 +103,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setGameMode(mode: GameMode) {
+        settingsRepository.gameMode = mode
         _uiState.value = _uiState.value.copy(gameMode = mode)
     }
 

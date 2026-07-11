@@ -94,10 +94,10 @@ fun HomeScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ColorChoiceButton("Rated", gameMode == GameMode.RATED) {
+            ChoiceButton("Rated", gameMode == GameMode.RATED) {
                 onGameModeChanged(GameMode.RATED)
             }
-            ColorChoiceButton("Training", gameMode == GameMode.TRAINING) {
+            ChoiceButton("Training", gameMode == GameMode.TRAINING) {
                 onGameModeChanged(GameMode.TRAINING)
             }
         }
@@ -140,10 +140,10 @@ fun HomeScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ColorChoiceButton("White ♔", playerColor == PlayerColor.WHITE) {
+            ChoiceButton("White ♔", playerColor == PlayerColor.WHITE) {
                 onPlayerColorChanged(PlayerColor.WHITE)
             }
-            ColorChoiceButton("Black ♚", playerColor == PlayerColor.BLACK) {
+            ChoiceButton("Black ♚", playerColor == PlayerColor.BLACK) {
                 onPlayerColorChanged(PlayerColor.BLACK)
             }
         }
@@ -198,7 +198,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ColorChoiceButton(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ChoiceButton(label: String, selected: Boolean, onClick: () -> Unit) {
     if (selected) {
         Button(onClick = onClick) { Text(label) }
     } else {

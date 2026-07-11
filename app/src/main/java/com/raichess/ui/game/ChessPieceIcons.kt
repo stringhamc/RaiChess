@@ -20,7 +20,10 @@ object ChessPieceIcons {
         'r' -> R.drawable.ic_piece_br
         'b' -> R.drawable.ic_piece_bb
         'n' -> R.drawable.ic_piece_bn
-        else -> R.drawable.ic_piece_bp
+        'p' -> R.drawable.ic_piece_bp
+        // boardSnapshot() only ever yields valid FEN piece chars; a stray
+        // char signals a bug elsewhere, so fail loudly rather than hide it
+        else -> throw IllegalArgumentException("Not a FEN piece char: $piece")
     }
 
     fun contentDescription(piece: Char): String {
