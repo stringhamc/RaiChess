@@ -11,6 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // chesslib is published via JitPack only
+        maven(url = "https://jitpack.io")
     }
 }
 

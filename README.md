@@ -217,9 +217,9 @@ Contributions are welcome! Please follow these guidelines:
 
 ### Phase 1: MVP (Weeks 1-6)
 - [x] Project setup and architecture
-- [ ] Chess board UI
-- [ ] Stockfish integration
-- [ ] Basic game play
+- [x] Chess board UI
+- [ ] Stockfish integration (interim: built-in RaiEngine, a Kotlin alpha-beta engine with ELO-scaled strength)
+- [x] Basic game play (play vs AI, ELO tracking, resign, auto-queen promotion)
 - [ ] Database setup
 - [ ] Simple analysis
 

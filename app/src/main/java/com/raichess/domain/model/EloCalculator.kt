@@ -122,6 +122,10 @@ enum class PlayerColor {
 /**
  * ELO configuration for Stockfish
  * Maps target ELO to Stockfish UCI parameters
+ *
+ * Note: these depth/skillLevel/thinkingTime mappings are for the planned
+ * Stockfish UCI integration and are NOT read by the interim RaiEngine,
+ * which derives its own strength scaling from the target ELO.
  */
 data class EloConfiguration(
     val targetElo: Int,
