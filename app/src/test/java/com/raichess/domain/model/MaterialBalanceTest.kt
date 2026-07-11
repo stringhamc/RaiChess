@@ -50,6 +50,21 @@ class MaterialBalanceTest {
     }
 
     @Test
+    fun `a promotion does not show as a captured pawn`() {
+        // Turn one white pawn into a second white queen, no captures.
+        val board = startingBoard().toMutableList()
+        board[8] = 'Q' // a2 pawn promoted (7 white pawns, 2 white queens now)
+        val balance = MaterialCalculator.compute(board)
+        assertTrue(
+            "promotion should not add a phantom captured pawn",
+            balance.capturedWhitePieces.isEmpty()
+        )
+        assertTrue(balance.capturedBlackPieces.isEmpty())
+        // A pawn (1) became a queen (9): net +8 for white
+        assertEquals(8, balance.diff)
+    }
+
+    @Test
     fun `promotion never produces negative captured counts`() {
         val board = emptyBoard()
         board[4] = 'K'

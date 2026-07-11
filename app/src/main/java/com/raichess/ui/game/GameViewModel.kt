@@ -53,7 +53,8 @@ data class GameUiState(
     val canUndo: Boolean = false,
     /** Increments only when a move is applied — the animation key. Undo and new game never animate. */
     val moveSeq: Int = 0,
-    val animationsEnabled: Boolean = false,
+    // Overwritten from SettingsRepository at construction; on by default
+    val animationsEnabled: Boolean = true,
     /** FEN piece chars ('P', 'k', ...) or null for empty, indexed a1=0 .. h8=63. */
     val squares: List<Char?> = emptyList(),
     val selectedSquare: Int? = null,
@@ -195,6 +196,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         ) return
 
+        // board and moveList are always mutated together (see applyMove),
+        // so the canUndo moveCount>=2 gate guarantees >=2 plies of history
         board.undoMove() // AI's reply
         board.undoMove() // player's mistaken move
         // Rebuild rather than removeLast(): MoveList caches its SAN encoding

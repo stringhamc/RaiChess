@@ -35,13 +35,21 @@ object MaterialCalculator {
     }
 
     private fun missingPieces(counts: Map<Char, Int>, white: Boolean): List<Char> {
+        // A promoted pawn leaves the pawn count one short without being a
+        // capture, so count net promotions (pieces above their starting
+        // number) and discount that many "missing" pawns — otherwise the
+        // captured row shows a phantom pawn for the promoting side.
+        val promotions = listOf('q', 'r', 'b', 'n').sumOf { type ->
+            val piece = if (white) type.uppercaseChar() else type
+            ((counts[piece] ?: 0) - INITIAL_COUNTS.getValue(type)).coerceAtLeast(0)
+        }
         val missing = mutableListOf<Char>()
         // Highest value first for display
         for (type in listOf('q', 'r', 'b', 'n', 'p')) {
             val piece = if (white) type.uppercaseChar() else type
-            // Promotion can push a count above its initial value; clamp at zero
-            val count = (INITIAL_COUNTS.getValue(type) - (counts[piece] ?: 0))
+            var count = (INITIAL_COUNTS.getValue(type) - (counts[piece] ?: 0))
                 .coerceAtLeast(0)
+            if (type == 'p') count = (count - promotions).coerceAtLeast(0)
             repeat(count) { missing.add(piece) }
         }
         return missing
