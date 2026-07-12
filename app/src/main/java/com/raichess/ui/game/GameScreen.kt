@@ -64,6 +64,9 @@ fun GameScreen(
     val playerIsWhite = state.playerColor == PlayerColor.WHITE
     // Positive = the player is ahead on material
     val playerDiff = if (playerIsWhite) material.diff else -material.diff
+    // Each row shows the trophies for the side nearest it: the opponent's
+    // captures (the player's own lost pieces) go in the top row, the
+    // player's captures in the bottom row.
     val opponentCaptures =
         if (playerIsWhite) material.capturedWhitePieces else material.capturedBlackPieces
     val playerCaptures =

@@ -140,7 +140,8 @@ data class EloConfiguration(
         fun forElo(elo: Int): EloConfiguration {
             return when {
                 elo < 1000 -> EloConfiguration(
-                    targetElo = elo.coerceIn(800, 999),
+                    // Floor matches the opponent slider's 400 minimum
+                    targetElo = elo.coerceIn(400, 999),
                     depth = 1,
                     skillLevel = 0,
                     thinkingTimeMs = 500
