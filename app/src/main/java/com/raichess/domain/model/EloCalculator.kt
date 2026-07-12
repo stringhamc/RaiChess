@@ -133,12 +133,19 @@ data class EloConfiguration(
 ) {
     companion object {
         /**
-         * Get Stockfish configuration for target ELO
+         * Get Stockfish configuration for a target ELO.
+         *
+         * In-app this is only called for the Stockfish band (targetElo >=
+         * EngineFactory.STOCKFISH_MIN_ELO); EngineFactory routes weaker
+         * opponents to RaiEngine instead. The sub-1350 branches below are
+         * therefore unreachable via the app and exist only to keep this a
+         * complete ELO->config mapping (and are exercised directly by tests).
          */
         fun forElo(elo: Int): EloConfiguration {
             return when {
                 elo < 1000 -> EloConfiguration(
-                    // Floor matches the opponent slider's 400 minimum
+                    // Clamped to the app's 400 opponent floor for a sane
+                    // targetElo when called directly below the Stockfish band.
                     targetElo = elo.coerceIn(400, 999),
                     skillLevel = 0,
                     thinkingTimeMs = 500
