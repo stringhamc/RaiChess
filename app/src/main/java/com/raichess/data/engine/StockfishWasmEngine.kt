@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -37,7 +38,11 @@ class StockfishWasmEngine(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val output = LinkedBlockingQueue<String>()
     private val config = EloConfiguration.forElo(targetElo)
-    private val moveTimeMs = config.thinkingTimeMs.coerceIn(200L, 1500L)
+    // Strength is governed primarily by UCI_LimitStrength/UCI_Elo/Skill Level
+    // (the engine plays *at* the target rating), so move time is mostly a
+    // responsiveness knob. Scale it with the ELO tier but cap it so the UI
+    // never waits too long, and give a floor so WASM has room to search.
+    private val moveTimeMs = config.thinkingTimeMs.coerceIn(300L, 3000L)
 
     @Volatile private var webView: WebView? = null
     @Volatile private var state = State.UNINITIALIZED
@@ -45,16 +50,25 @@ class StockfishWasmEngine(
     private enum class State { UNINITIALIZED, READY, FAILED }
 
     override fun selectMove(board: Board): Move? {
-        if (!ensureReady()) return fallback.selectMove(board)
+        return try {
+            if (!ensureReady()) return fallback.selectMove(board)
 
-        output.clear()
-        send("ucinewgame")
-        send("position fen ${board.fen}")
-        send("go movetime $moveTimeMs")
+            output.clear()
+            send("ucinewgame")
+            send("position fen ${board.fen}")
+            send("go movetime $moveTimeMs")
 
-        val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { it.startsWith("bestmove") }
-            ?: return fallback.selectMove(board)
-        return parseBestMove(best, board) ?: fallback.selectMove(board)
+            val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { it.startsWith("bestmove") }
+            if (best == null) {
+                Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
+                return fallback.selectMove(board)
+            }
+            parseBestMove(best, board) ?: fallback.selectMove(board)
+        } catch (e: Exception) {
+            // Any failure (incl. thread interruption) must not break play
+            Log.w(TAG, "selectMove failed; using RaiEngine fallback", e)
+            fallback.selectMove(board)
+        }
     }
 
     /** Build the WebView and complete the UCI handshake once. Thread-safe. */
@@ -71,16 +85,17 @@ class StockfishWasmEngine(
 
         // engine.html calls AndroidEngine.onReady() once the worker is created
         val ready = awaitToken(INIT_TIMEOUT_MS) { it == READY_SENTINEL || it == ERROR_SENTINEL }
-        if (ready != READY_SENTINEL) return fail()
+        if (ready != READY_SENTINEL) return fail("worker did not start within ${INIT_TIMEOUT_MS}ms")
 
-        if (!handshake()) return fail()
+        if (!handshake()) return fail("uci handshake failed")
 
         // Apply strength limits for this ELO (UCI_LimitStrength / UCI_Elo / Skill Level)
         config.getUciCommands().forEach { send(it) }
         send("setoption name Threads value 1")
         send("setoption name Hash value 16")
-        if (!isReady()) return fail()
+        if (!isReady()) return fail("engine not ready after options")
 
+        Log.i(TAG, "Stockfish WASM ready (targetElo band, movetime=${moveTimeMs}ms)")
         state = State.READY
         return true
     }
@@ -96,7 +111,8 @@ class StockfishWasmEngine(
         return awaitToken(HANDSHAKE_TIMEOUT_MS) { it == "readyok" } != null
     }
 
-    private fun fail(): Boolean {
+    private fun fail(reason: String): Boolean {
+        Log.w(TAG, "Stockfish unavailable ($reason); using RaiEngine fallback")
         state = State.FAILED
         destroyWebView()
         return false
@@ -163,10 +179,14 @@ class StockfishWasmEngine(
     private inner class Bridge {
         @JavascriptInterface fun onReady() { output.offer(READY_SENTINEL) }
         @JavascriptInterface fun onMessage(line: String) { output.offer(line.trim()) }
-        @JavascriptInterface fun onError(message: String) { output.offer(ERROR_SENTINEL) }
+        @JavascriptInterface fun onError(message: String) {
+            Log.w(TAG, "engine JS error: $message")
+            output.offer(ERROR_SENTINEL)
+        }
     }
 
     companion object {
+        private const val TAG = "StockfishWasmEngine"
         private const val READY_SENTINEL = "__ready__"
         private const val ERROR_SENTINEL = "__error__"
         private const val INIT_TIMEOUT_MS = 8000L

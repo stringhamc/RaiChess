@@ -15,8 +15,11 @@ object EngineFactory {
 
     const val STOCKFISH_MIN_ELO = 1300
 
+    /** Pure band-selection predicate, extracted for unit testing. */
+    fun usesStockfish(targetElo: Int): Boolean = targetElo >= STOCKFISH_MIN_ELO
+
     fun create(context: Context, targetElo: Int): ChessEngine {
-        return if (targetElo >= STOCKFISH_MIN_ELO) {
+        return if (usesStockfish(targetElo)) {
             StockfishWasmEngine(context, targetElo, fallback = RaiEngine(targetElo))
         } else {
             RaiEngine(targetElo)
