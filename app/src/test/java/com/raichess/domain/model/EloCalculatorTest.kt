@@ -80,6 +80,24 @@ class EloCalculatorTest {
     }
 
     @Test
+    fun `uci commands set only skill level, never the SF11-plus elo options`() {
+        // The bundled Stockfish 10 rejects UCI_Elo/UCI_LimitStrength as
+        // "No such option"; sending them silently breaks strength control.
+        // Guard against a regression that reintroduces them.
+        for (elo in intArrayOf(1350, 1600, 2000, 2400, 2800)) {
+            val commands = EloConfiguration.forElo(elo).getUciCommands()
+            assertTrue(
+                "expected a Skill Level command, got $commands",
+                commands.any { it.contains("Skill Level") }
+            )
+            assertTrue(
+                "must not emit UCI_Elo/UCI_LimitStrength, got $commands",
+                commands.none { it.contains("UCI_Elo") || it.contains("UCI_LimitStrength") }
+            )
+        }
+    }
+
+    @Test
     fun `recommended opponent is slightly above player`() {
         assertEquals(1250, EloConfiguration.getRecommendedOpponentElo(1200))
         assertEquals(2800, EloConfiguration.getRecommendedOpponentElo(2900))

@@ -14,14 +14,16 @@ import kotlin.random.Random
  * RaiEngine - built-in chess AI for RaiChess.
  *
  * A pure-Kotlin alpha-beta engine whose playing strength is scaled to a
- * target ELO (400-2800). It is the interim opponent until the Stockfish
- * NDK integration lands; the [selectMove] contract is designed so a
- * Stockfish-backed implementation can replace it without UI changes.
+ * target ELO (400-2800). It is the permanent opponent for the beginner band:
+ * [EngineFactory] routes ELO below STOCKFISH_MIN_ELO here and the strong band
+ * to [StockfishWasmEngine], because Stockfish can't credibly play that weak
+ * (even at Skill Level 0). Both share the [ChessEngine.selectMove] contract, so
+ * either can drive the game without UI changes.
  *
  * The ELO labels are approximate — a rough depth/blunder mapping, not a
  * measured rating. The low end is deliberately near-random so beginner
- * settings feel genuinely weak; true rating accuracy waits on Stockfish's
- * UCI_LimitStrength.
+ * settings feel genuinely weak, which is exactly the behaviour Stockfish's
+ * Skill Level can't reproduce at the bottom of the range.
  *
  * Strength scaling:
  * - Search depth grows with target ELO (1-4 plies)
