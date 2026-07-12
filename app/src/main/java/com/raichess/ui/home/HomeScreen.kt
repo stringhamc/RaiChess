@@ -19,12 +19,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.raichess.data.engine.RaiEngine
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.PlayerColor
+import com.raichess.ui.theme.ChessColors
 import kotlin.math.roundToInt
 
 /**
@@ -124,9 +124,9 @@ fun HomeScreen(
             onValueChange = { onOpponentEloChanged((it / 50f).roundToInt() * 50) },
             valueRange = RaiEngine.MIN_ELO.toFloat()..RaiEngine.MAX_ELO.toFloat(),
             colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = Color.White,
-                inactiveTrackColor = Color(0xFF333333)
+                thumbColor = ChessColors.ControlActive,
+                activeTrackColor = ChessColors.ControlActive,
+                inactiveTrackColor = ChessColors.SliderInactiveTrack
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -171,10 +171,10 @@ fun HomeScreen(
                 checked = animationsEnabled,
                 onCheckedChange = onAnimationsChanged,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Color(0xFF555555),
-                    uncheckedThumbColor = Color(0xFF888888),
-                    uncheckedTrackColor = Color(0xFF222222)
+                    checkedThumbColor = ChessColors.ControlActive,
+                    checkedTrackColor = ChessColors.ControlTrackActive,
+                    uncheckedThumbColor = ChessColors.ControlThumbInactive,
+                    uncheckedTrackColor = ChessColors.ControlTrackInactive
                 )
             )
         }

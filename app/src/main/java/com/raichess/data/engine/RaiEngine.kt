@@ -14,9 +14,14 @@ import kotlin.random.Random
  * RaiEngine - built-in chess AI for RaiChess.
  *
  * A pure-Kotlin alpha-beta engine whose playing strength is scaled to a
- * target ELO (800-2800). It is the interim opponent until the Stockfish
+ * target ELO (400-2800). It is the interim opponent until the Stockfish
  * NDK integration lands; the [selectMove] contract is designed so a
  * Stockfish-backed implementation can replace it without UI changes.
+ *
+ * The ELO labels are approximate — a rough depth/blunder mapping, not a
+ * measured rating. The low end is deliberately near-random so beginner
+ * settings feel genuinely weak; true rating accuracy waits on Stockfish's
+ * UCI_LimitStrength.
  *
  * Strength scaling:
  * - Search depth grows with target ELO (1-4 plies)
@@ -40,6 +45,8 @@ class RaiEngine(
 
     /** Probability of playing a completely random legal move. */
     val blunderChance: Double = when {
+        elo < 500 -> 0.60   // near-random beginner bot
+        elo < 700 -> 0.42
         elo < 1000 -> 0.30
         elo < 1200 -> 0.20
         elo < 1400 -> 0.12
@@ -51,6 +58,7 @@ class RaiEngine(
 
     /** Moves within this many centipawns of the best are candidates at lower ELOs. */
     private val candidateWindow: Int = when {
+        elo < 700 -> 200
         elo < 1200 -> 120
         elo < 1600 -> 60
         elo < 2000 -> 25
@@ -159,9 +167,10 @@ class RaiEngine(
     }
 
     companion object {
-        // Selectable opponent strength range; intentionally narrower than
-        // EloCalculator's 400-3000, which bounds the player's own rating
-        const val MIN_ELO = 800
+        // Selectable opponent strength range; the low end is a near-random
+        // beginner bot. Narrower at the top than EloCalculator's 400-3000,
+        // which bounds the player's own rating.
+        const val MIN_ELO = 400
         const val MAX_ELO = 2800
         private const val INFINITY = 1_000_000
         private const val MATE_SCORE = 100_000

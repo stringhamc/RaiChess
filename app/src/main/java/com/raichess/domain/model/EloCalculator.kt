@@ -7,7 +7,7 @@ package com.raichess.domain.model
 object EloCalculator {
 
     const val K_FACTOR = 32 // Standard K-factor for rating changes
-    const val DEFAULT_STARTING_ELO = 1200
+    const val DEFAULT_STARTING_ELO = 600 // beginner-friendly start; rating climbs with wins
     const val MIN_ELO = 400
     const val MAX_ELO = 3000
 
@@ -207,7 +207,7 @@ data class EloConfiguration(
          * Slightly above player's level for optimal learning
          */
         fun getRecommendedOpponentElo(playerElo: Int): Int {
-            return (playerElo + 50).coerceIn(800, 2800)
+            return (playerElo + 50).coerceIn(400, 2800)
         }
     }
 

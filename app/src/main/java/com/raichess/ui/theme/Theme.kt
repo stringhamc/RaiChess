@@ -64,6 +64,13 @@ object ChessColors {
     val LegalMoveIndicator = Color(0xFF8F8F8F)
     val LastMove = Color(0x559F9F9F)
 
+    // Grayscale control colors (sliders, switches) — single source of truth
+    val ControlActive = Color(0xFFFFFFFF)
+    val ControlTrackActive = Color(0xFF555555)
+    val ControlThumbInactive = Color(0xFF888888)
+    val ControlTrackInactive = Color(0xFF222222)
+    val SliderInactiveTrack = Color(0xFF333333)
+
     // Evaluation colors (grayscale)
     val EvalPositive = Color(0xFFCCCCCC) // Light gray for advantage
     val EvalNegative = Color(0xFF444444) // Dark gray for disadvantage

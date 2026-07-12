@@ -17,7 +17,7 @@ An offline-first Android chess application with Stockfish AI, ELO-based difficul
 ## Features
 
 🎯 **ELO-Based Gameplay**
-- Dynamic opponent strength from 800-2800+ ELO
+- Dynamic opponent strength from 400-2800+ ELO
 - Personal ELO rating that evolves with your play
 - Accurate rating calculation based on results and move accuracy
 - Rated mode (no takebacks) or Training mode: undo is allowed but
@@ -163,7 +163,7 @@ This will create binaries for:
 
 ### How It Works
 
-- **Initial ELO:** 1200 (standard starting rating)
+- **Initial ELO:** 600 (beginner-friendly; climbs as you win)
 - **Updates After Each Game:** Based on opponent strength and result
 - **Accuracy Bonus:** Good play is rewarded even in losses
 - **K-Factor:** 32 (standard chess rating change rate)
