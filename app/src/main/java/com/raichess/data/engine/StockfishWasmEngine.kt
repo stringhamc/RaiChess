@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -15,6 +16,7 @@ import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.raichess.domain.model.EloConfiguration
+import org.json.JSONObject
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -64,6 +66,8 @@ class StockfishWasmEngine(
     override fun selectMove(board: Board): Move? {
         return try {
             if (!ensureReady()) return fallback.selectMove(board)
+            // Closed during/just after init: bail before doing search work.
+            if (released) return null
 
             output.clear()
             send("ucinewgame")
@@ -206,16 +210,26 @@ class StockfishWasmEngine(
     }
 
     private fun send(cmd: String) {
-        val escaped = cmd.replace("\\", "\\\\").replace("'", "\\'")
-        mainHandler.post { webView?.evaluateJavascript("uciCmd('$escaped')", null) }
+        // JSONObject.quote yields a fully-escaped, double-quoted JS string
+        // literal (handles quotes, backslashes, control chars, U+2028/U+2029) —
+        // more correct than hand-escaping for evaluateJavascript, and safe if a
+        // future caller ever passes less-constrained text through send().
+        val literal = JSONObject.quote(cmd)
+        mainHandler.post { webView?.evaluateJavascript("uciCmd($literal)", null) }
     }
 
     private fun awaitToken(timeoutMs: Long, match: (String) -> Boolean): String? {
-        val deadline = System.currentTimeMillis() + timeoutMs
+        // elapsedRealtime is monotonic, so a wall-clock change (NTP, DST, user
+        // edit) mid-wait can't skew the deadline. Poll in short slices and
+        // re-check `released` each slice, so close() unblocks the wait promptly
+        // even if its ERROR_SENTINEL was wiped by a racing output.clear().
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
         while (true) {
-            val remaining = deadline - System.currentTimeMillis()
+            if (released) return null
+            val remaining = deadline - SystemClock.elapsedRealtime()
             if (remaining <= 0) return null
-            val line = output.poll(remaining, TimeUnit.MILLISECONDS) ?: return null
+            val slice = remaining.coerceAtMost(POLL_SLICE_MS)
+            val line = output.poll(slice, TimeUnit.MILLISECONDS) ?: continue
             if (line == ERROR_SENTINEL) return null
             if (match(line)) return line
         }
@@ -252,5 +266,8 @@ class StockfishWasmEngine(
         private const val INIT_TIMEOUT_MS = 8000L
         private const val HANDSHAKE_TIMEOUT_MS = 5000L
         private const val BESTMOVE_GRACE_MS = 4000L
+        // Max blocking-poll granularity; bounds how long a wait can ignore a
+        // teardown (released) signal.
+        private const val POLL_SLICE_MS = 200L
     }
 }
