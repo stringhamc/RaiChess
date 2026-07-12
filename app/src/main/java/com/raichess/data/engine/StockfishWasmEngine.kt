@@ -63,7 +63,7 @@ class StockfishWasmEngine(
                 Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
                 return fallback.selectMove(board)
             }
-            parseBestMove(best, board) ?: fallback.selectMove(board)
+            parseUciBestMove(board, best) ?: fallback.selectMove(board)
         } catch (e: Exception) {
             // Any failure (incl. thread interruption) must not break play
             Log.w(TAG, "selectMove failed; using RaiEngine fallback", e)
@@ -120,29 +120,42 @@ class StockfishWasmEngine(
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView() {
-        val assetLoader = WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(appContext))
-            .build()
-        val view = WebView(appContext)
-        view.settings.javaScriptEnabled = true
-        view.settings.domStorageEnabled = true
-        view.addJavascriptInterface(Bridge(), "AndroidEngine")
-        view.webViewClient = object : WebViewClientCompat() {
-            override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest
-            ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+        // new WebView(...) can throw on devices where the WebView provider is
+        // missing/updating/disabled. This runs on the main thread's loop, so
+        // an uncaught throw here would crash the app rather than fall back —
+        // catch it and signal an error so ensureReady() falls back cleanly.
+        try {
+            val assetLoader = WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(appContext))
+                .build()
+            val view = WebView(appContext)
+            view.settings.javaScriptEnabled = true
+            view.settings.domStorageEnabled = true
+            view.addJavascriptInterface(Bridge(), "AndroidEngine")
+            view.webViewClient = object : WebViewClientCompat() {
+                override fun shouldInterceptRequest(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+            }
+            webView = view
+            view.loadUrl("https://appassets.androidplatform.net/assets/stockfish/engine.html")
+        } catch (e: Throwable) {
+            Log.w(TAG, "WebView construction failed", e)
+            output.offer(ERROR_SENTINEL)
         }
-        webView = view
-        view.loadUrl("https://appassets.androidplatform.net/assets/stockfish/engine.html")
     }
 
     private fun destroyWebView() {
         val view = webView ?: return
         webView = null
         mainHandler.post {
-            view.removeJavascriptInterface("AndroidEngine")
-            view.destroy()
+            try {
+                view.removeJavascriptInterface("AndroidEngine")
+                view.destroy()
+            } catch (e: Throwable) {
+                Log.w(TAG, "WebView teardown failed", e)
+            }
         }
     }
 
@@ -166,16 +179,6 @@ class StockfishWasmEngine(
         }
     }
 
-    private fun parseBestMove(line: String, board: Board): Move? {
-        val lan = line.split(" ").getOrNull(1)?.lowercase() ?: return null
-        if (lan == "(none)" || lan.length < 4) return null
-        // Only trust a move Stockfish reports that is actually legal here.
-        // Case-insensitive so a promotion (e7e8q) matches regardless of how
-        // chesslib renders the promotion piece char.
-        return MoveGenerator.generateLegalMoves(board)
-            .firstOrNull { it.toString().lowercase() == lan }
-    }
-
     private inner class Bridge {
         @JavascriptInterface fun onReady() { output.offer(READY_SENTINEL) }
         @JavascriptInterface fun onMessage(line: String) { output.offer(line.trim()) }
@@ -186,6 +189,20 @@ class StockfishWasmEngine(
     }
 
     companion object {
+        /**
+         * Parse a UCI "bestmove <lan>" line into a legal chesslib [Move] on
+         * [board], or null. Case-insensitive (so a promotion like `e7e8q`
+         * matches) and always re-validated against the actual legal moves, so
+         * a malformed or illegal engine reply can never be applied. Pure —
+         * unit-testable without a WebView.
+         */
+        fun parseUciBestMove(board: Board, bestmoveLine: String): Move? {
+            val lan = bestmoveLine.split(" ").getOrNull(1)?.lowercase() ?: return null
+            if (lan == "(none)" || lan.length < 4) return null
+            return MoveGenerator.generateLegalMoves(board)
+                .firstOrNull { it.toString().lowercase() == lan }
+        }
+
         private const val TAG = "StockfishWasmEngine"
         private const val READY_SENTINEL = "__ready__"
         private const val ERROR_SENTINEL = "__error__"

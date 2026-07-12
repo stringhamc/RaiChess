@@ -13,7 +13,9 @@ import android.content.Context
  */
 object EngineFactory {
 
-    const val STOCKFISH_MIN_ELO = 1300
+    // Stockfish's UCI_Elo floor is ~1350; below it UCI_Elo is ignored/clamped
+    // and it would play too strong for the label, so RaiEngine owns that band.
+    const val STOCKFISH_MIN_ELO = 1350
 
     /** Pure band-selection predicate, extracted for unit testing. */
     fun usesStockfish(targetElo: Int): Boolean = targetElo >= STOCKFISH_MIN_ELO
