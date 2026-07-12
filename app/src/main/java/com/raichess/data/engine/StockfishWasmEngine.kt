@@ -38,10 +38,14 @@ class StockfishWasmEngine(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val output = LinkedBlockingQueue<String>()
     private val config = EloConfiguration.forElo(targetElo)
-    // Strength is governed by the engine's Skill Level (see getUciCommands),
-    // so move time is mostly a responsiveness knob. Scale it with the ELO tier
-    // but cap it so the UI never waits too long, and give a floor so WASM has
-    // room to search.
+    // Strength is governed by the engine's Skill Level (see getUciCommands), so
+    // move time is mostly a responsiveness knob: cap it at 3s so a phone never
+    // grinds too long per move, with a floor so WASM has room to search.
+    // Known tradeoff: Skill Level plateaus at 20 from ~2200 ELO up, so above
+    // that the only remaining strength lever is think time — and with this cap,
+    // every 2200+ setting plays at effectively full strength. That's an
+    // intentional casual-play choice (the alternative is 7–10s moves), and the
+    // affected band is already well above the target audience's level.
     private val moveTimeMs = config.thinkingTimeMs.coerceIn(300L, 3000L)
 
     @Volatile private var webView: WebView? = null
@@ -68,6 +72,11 @@ class StockfishWasmEngine(
 
             val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { it.startsWith("bestmove") }
             if (best == null) {
+                // close() unblocks the wait via ERROR_SENTINEL during teardown.
+                // Past ensureReady(), only close() sets `released`, so this
+                // means the game is being torn down — skip the wasted fallback
+                // search against a board the ViewModel has likely replaced.
+                if (released) return null
                 Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
                 return fallback.selectMove(board)
             }
