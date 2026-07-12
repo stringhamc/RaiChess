@@ -16,6 +16,12 @@ interface ChessEngine {
     /**
      * Select a move for the side to move on [board], or null if the game is
      * over (no legal moves) or no move could be produced.
+     *
+     * Not thread-safe: call from a single sequential caller (one move at a
+     * time), off the UI thread. Implementations may hold per-call state that
+     * overlapping calls would corrupt — [StockfishWasmEngine] shares one UCI
+     * output queue across the call, for example. [GameViewModel] satisfies this
+     * by driving the engine from a single coroutine.
      */
     fun selectMove(board: Board): Move?
 
