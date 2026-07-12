@@ -21,8 +21,8 @@ class StockfishMoveParseTest {
     @Test
     fun `parses a promotion move regardless of case`() {
         val board = Board()
-        // White pawn on e7, kings placed so e8=Q is legal
-        board.loadFromFen("4k3/4P3/8/8/8/8/8/4K3 w - - 0 1")
+        // White pawn on e7 with e8 empty (black king on h8) so e8=Q is legal
+        board.loadFromFen("7k/4P3/8/8/8/8/8/4K3 w - - 0 1")
         val move = StockfishWasmEngine.parseUciBestMove(board, "bestmove e7e8q")
         assertEquals("e7e8q", move?.toString()?.lowercase())
     }
