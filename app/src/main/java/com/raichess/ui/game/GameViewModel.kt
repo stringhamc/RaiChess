@@ -62,6 +62,10 @@ data class GameUiState(
     val selectedSquare: Int? = null,
     val legalTargets: Set<Int> = emptySet(),
     val lastMove: LastMove? = null,
+    /** True when [lastMove] was played by the AI opponent (highlight distinctly). */
+    val lastMoveByOpponent: Boolean = false,
+    /** Label of the engine actually playing ("RaiEngine" / "Stockfish" / fallback). */
+    val engineLabel: String = "RaiEngine",
     val moveHistorySan: List<String> = emptyList(),
     val isPlayerTurn: Boolean = false,
     val isAiThinking: Boolean = false,
@@ -130,7 +134,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Release the previous game's engine (may hold a WebView) and pick the
         // engine for this opponent strength (RaiEngine weak band / Stockfish above)
         engine?.close()
-        engine = EngineFactory.create(getApplication<Application>(), state.opponentElo)
+        val newEngine = EngineFactory.create(getApplication<Application>(), state.opponentElo)
+        engine = newEngine
         gameRecorded = false
         gameId++
         gameUndoCount = 0
@@ -142,6 +147,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             selectedSquare = null,
             legalTargets = emptySet(),
             lastMove = null,
+            lastMoveByOpponent = false,
+            engineLabel = newEngine.activeEngineLabel,
             moveHistorySan = emptyList(),
             isPlayerTurn = color == PlayerColor.WHITE,
             isAiThinking = false,
@@ -221,6 +228,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             selectedSquare = null,
             legalTargets = emptySet(),
             lastMove = remaining.lastOrNull()?.let { LastMove(it.from.ordinal, it.to.ordinal) },
+            lastMoveByOpponent = remaining.isNotEmpty() &&
+                isOpponentMove(remaining.size - 1, state.playerColor),
             moveHistorySan = sanHistory(),
             isPlayerInCheck = isPlayerInCheck(),
             undoCount = gameUndoCount,
@@ -283,6 +292,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = current.copy(
                     isAiThinking = false,
                     isPlayerTurn = true,
+                    // Reflect a mid-game Stockfish->RaiEngine fallback in the label
+                    engineLabel = currentEngine.activeEngineLabel,
                     canUndo = canUndo(
                         mode = current.gameMode,
                         isPlaying = true,
@@ -307,6 +318,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             selectedSquare = null,
             legalTargets = emptySet(),
             lastMove = LastMove(move.from.ordinal, move.to.ordinal),
+            lastMoveByOpponent = isOpponentMove(moveList.size - 1, state.playerColor),
             moveHistorySan = sanHistory(),
             isPlayerInCheck = isPlayerInCheck(),
             moveSeq = state.moveSeq + 1,
@@ -380,6 +392,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Multiple matches means promotion; auto-queen for the MVP
         return matches.firstOrNull { it.promotion.pieceType == PieceType.QUEEN }
             ?: matches.first()
+    }
+
+    /**
+     * Whether the move at [moveIndex] (0 = White's first) was played by the AI
+     * opponent, from move parity: White moves the even indices, and the AI is
+     * whichever side the player is not.
+     */
+    private fun isOpponentMove(moveIndex: Int, playerColor: PlayerColor): Boolean {
+        val whiteMoved = moveIndex % 2 == 0
+        val playerIsWhite = playerColor == PlayerColor.WHITE
+        return whiteMoved != playerIsWhite
     }
 
     private fun isPlayerInCheck(): Boolean {

@@ -62,7 +62,11 @@ object ChessColors {
     // Selection and highlighting (grayscale only)
     val SelectedSquare = Color(0xFF8F8F8F)
     val LegalMoveIndicator = Color(0xFF8F8F8F)
+    // The player's own last move: subtle. The opponent's last move: stronger
+    // fill plus a ring, so it's easy to see what the AI just played.
     val LastMove = Color(0x559F9F9F)
+    val LastMoveOpponent = Color(0x88BFBFBF)
+    val LastMoveOpponentRing = Color(0xCCFFFFFF)
 
     // Grayscale control colors (sliders, switches) — single source of truth
     val ControlActive = Color(0xFFFFFFFF)

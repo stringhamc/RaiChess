@@ -25,6 +25,15 @@ interface ChessEngine {
      */
     fun selectMove(board: Board): Move?
 
+    /**
+     * Short human-readable label for the engine currently producing moves,
+     * for a UI indicator. May change across [selectMove] calls if a stronger
+     * engine degrades to a weaker one — e.g. [StockfishWasmEngine] reports
+     * "Stockfish" until its WebView/WASM bridge fails, then "RaiEngine
+     * (fallback)".
+     */
+    val activeEngineLabel: String
+
     /** Release any held resources (e.g. a WebView). No-op by default. */
     fun close() {}
 }

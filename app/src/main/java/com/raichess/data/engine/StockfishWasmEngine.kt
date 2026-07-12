@@ -52,6 +52,12 @@ class StockfishWasmEngine(
 
     @Volatile private var webView: WebView? = null
     @Volatile private var state = State.UNINITIALIZED
+    // Sticky: set the first time a move is served by the RaiEngine fallback,
+    // so the UI indicator can show that Stockfish isn't actually driving.
+    @Volatile private var everFellBack = false
+
+    override val activeEngineLabel: String
+        get() = if (everFellBack || state == State.FAILED) "RaiEngine (fallback)" else "Stockfish"
     // Set once the engine is torn down (fail/close). Guards the async
     // createWebView post: if teardown wins the race, the freshly-built WebView
     // is destroyed immediately instead of leaking.
@@ -65,7 +71,7 @@ class StockfishWasmEngine(
     // sequential coroutine (one move at a time), which this relies on.
     override fun selectMove(board: Board): Move? {
         return try {
-            if (!ensureReady()) return fallback.selectMove(board)
+            if (!ensureReady()) return fallbackMove(board)
             // Closed during/just after init: bail before doing search work.
             if (released) return null
 
@@ -82,14 +88,20 @@ class StockfishWasmEngine(
                 // search against a board the ViewModel has likely replaced.
                 if (released) return null
                 Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
-                return fallback.selectMove(board)
+                return fallbackMove(board)
             }
-            parseUciBestMove(board, best) ?: fallback.selectMove(board)
+            parseUciBestMove(board, best) ?: fallbackMove(board)
         } catch (e: Exception) {
             // Any failure (incl. thread interruption) must not break play
             Log.w(TAG, "selectMove failed; using RaiEngine fallback", e)
-            fallback.selectMove(board)
+            fallbackMove(board)
         }
+    }
+
+    /** Serve a move from the RaiEngine fallback and remember that we did. */
+    private fun fallbackMove(board: Board): Move? {
+        everFellBack = true
+        return fallback.selectMove(board)
     }
 
     /** Build the WebView and complete the UCI handshake once. Thread-safe. */

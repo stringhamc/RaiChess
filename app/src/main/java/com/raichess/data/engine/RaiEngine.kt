@@ -37,6 +37,8 @@ class RaiEngine(
 
     private val elo = targetElo.coerceIn(MIN_ELO, MAX_ELO)
 
+    override val activeEngineLabel: String get() = "RaiEngine"
+
     /** Full-move search depth in plies. */
     val searchDepth: Int = when {
         elo < 1000 -> 1
