@@ -213,12 +213,17 @@ data class EloConfiguration(
     }
 
     /**
-     * Get UCI commands to configure Stockfish
+     * Get UCI commands to configure the bundled Stockfish's strength.
+     *
+     * NOTE: the bundled Stockfish 10 (2019) WASM build predates the
+     * UCI_Elo/UCI_LimitStrength options (added in SF11), so those are rejected
+     * as "No such option" and must NOT be sent. Strength is governed solely by
+     * `Skill Level` (0–20), which this build does support. [skillLevel] is
+     * mapped from the target ELO in [forElo], monotonically increasing with the
+     * requested rating so a higher slider still yields a stronger opponent.
      */
     fun getUciCommands(): List<String> {
         return listOf(
-            "setoption name UCI_LimitStrength value true",
-            "setoption name UCI_Elo value $targetElo",
             "setoption name Skill Level value $skillLevel"
         )
     }

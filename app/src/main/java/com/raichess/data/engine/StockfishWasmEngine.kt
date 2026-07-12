@@ -38,14 +38,18 @@ class StockfishWasmEngine(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val output = LinkedBlockingQueue<String>()
     private val config = EloConfiguration.forElo(targetElo)
-    // Strength is governed primarily by UCI_LimitStrength/UCI_Elo/Skill Level
-    // (the engine plays *at* the target rating), so move time is mostly a
-    // responsiveness knob. Scale it with the ELO tier but cap it so the UI
-    // never waits too long, and give a floor so WASM has room to search.
+    // Strength is governed by the engine's Skill Level (see getUciCommands),
+    // so move time is mostly a responsiveness knob. Scale it with the ELO tier
+    // but cap it so the UI never waits too long, and give a floor so WASM has
+    // room to search.
     private val moveTimeMs = config.thinkingTimeMs.coerceIn(300L, 3000L)
 
     @Volatile private var webView: WebView? = null
     @Volatile private var state = State.UNINITIALIZED
+    // Set once the engine is torn down (fail/close). Guards the async
+    // createWebView post: if teardown wins the race, the freshly-built WebView
+    // is destroyed immediately instead of leaking.
+    @Volatile private var released = false
 
     private enum class State { UNINITIALIZED, READY, FAILED }
 
@@ -89,7 +93,9 @@ class StockfishWasmEngine(
 
         if (!handshake()) return fail("uci handshake failed")
 
-        // Apply strength limits for this ELO (UCI_LimitStrength / UCI_Elo / Skill Level)
+        // Apply strength for this ELO. The bundled SF10 build only supports
+        // `Skill Level` (UCI_Elo/UCI_LimitStrength came in SF11), so
+        // getUciCommands() sends just that — see EloConfiguration.
         config.getUciCommands().forEach { send(it) }
         send("setoption name Threads value 1")
         send("setoption name Hash value 16")
@@ -114,6 +120,7 @@ class StockfishWasmEngine(
     private fun fail(reason: String): Boolean {
         Log.w(TAG, "Stockfish unavailable ($reason); using RaiEngine fallback")
         state = State.FAILED
+        released = true
         destroyWebView()
         return false
     }
@@ -137,9 +144,27 @@ class StockfishWasmEngine(
                     view: WebView,
                     request: WebResourceRequest
                 ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+
+                // The engine only ever loads our local asset origin. Refuse any
+                // other navigation so a compromised/broken asset can't drive the
+                // WebView elsewhere.
+                override fun shouldOverrideUrlLoading(
+                    view: WebView,
+                    request: WebResourceRequest
+                ): Boolean {
+                    val host = request.url.host
+                    return host != ASSET_HOST
+                }
+            }
+            // If teardown already happened while this post was queued, don't
+            // leave a live WebView behind — destroy it, unblock any waiter, bail.
+            if (released) {
+                view.destroy()
+                output.offer(ERROR_SENTINEL)
+                return
             }
             webView = view
-            view.loadUrl("https://appassets.androidplatform.net/assets/stockfish/engine.html")
+            view.loadUrl("https://$ASSET_HOST/assets/stockfish/engine.html")
         } catch (e: Throwable) {
             Log.w(TAG, "WebView construction failed", e)
             output.offer(ERROR_SENTINEL)
@@ -160,6 +185,10 @@ class StockfishWasmEngine(
     }
 
     override fun close() {
+        released = true
+        // Wake any thread blocked in awaitToken (e.g. a selectMove awaiting
+        // bestmove) so close() doesn't leave it hanging until timeout.
+        output.offer(ERROR_SENTINEL)
         destroyWebView()
     }
 
@@ -204,6 +233,7 @@ class StockfishWasmEngine(
         }
 
         private const val TAG = "StockfishWasmEngine"
+        private const val ASSET_HOST = "appassets.androidplatform.net"
         private const val READY_SENTINEL = "__ready__"
         private const val ERROR_SENTINEL = "__error__"
         private const val INIT_TIMEOUT_MS = 8000L

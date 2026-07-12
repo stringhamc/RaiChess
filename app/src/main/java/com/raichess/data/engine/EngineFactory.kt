@@ -5,16 +5,17 @@ import android.content.Context
 /**
  * Chooses the opponent engine for a target ELO.
  *
- * Stockfish can't genuinely play below ~1300 (its UCI_Elo floor), and the
- * near-random beginner band is exactly what the tunable [RaiEngine] is for, so
- * the low band uses RaiEngine and the strong band uses Stockfish. The
- * Stockfish engine also carries a RaiEngine fallback in case the WASM/WebView
- * bridge fails on a given device.
+ * The bundled Stockfish is strength-limited via `Skill Level` (0–20), and even
+ * at Skill Level 0 it plays around a ~1300 club level — too strong to convince
+ * as a true beginner. The near-random beginner band is exactly what the tunable
+ * [RaiEngine] is for, so the low band uses RaiEngine and the strong band uses
+ * Stockfish. The Stockfish engine also carries a RaiEngine fallback in case the
+ * WASM/WebView bridge fails on a given device.
  */
 object EngineFactory {
 
-    // Stockfish's UCI_Elo floor is ~1350; below it UCI_Elo is ignored/clamped
-    // and it would play too strong for the label, so RaiEngine owns that band.
+    // Skill Level 0 is roughly where Stockfish stops feeling like a beginner
+    // (~1300). Below this, RaiEngine gives a more convincing weak opponent.
     const val STOCKFISH_MIN_ELO = 1350
 
     /** Pure band-selection predicate, extracted for unit testing. */
