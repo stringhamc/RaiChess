@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RaiChess minimal black pawn. Original geometric artwork for the
+     pure black & white theme; generated from a single spec. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="45dp"
+    android:height="45dp"
+    android:viewportWidth="45"
+    android:viewportHeight="45">
+    <group android:translateX="0.7" android:translateY="1.1">
+        <path android:pathData="M17.5,11 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 z" android:fillColor="#42000000" />
+        <path android:pathData="M19.5,15.5 L25.5,15.5 L28,33 L17,33 z" android:fillColor="#42000000" />
+        <path android:pathData="M13.5,33 h18 v5 h-18 z" android:fillColor="#42000000" />
+    </group>
+    <path
+        android:pathData="M17.5,11 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 z"
+        android:fillColor="#000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M19.5,15.5 L25.5,15.5 L28,33 L17,33 z"
+        android:fillColor="#000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M13.5,33 h18 v5 h-18 z"
+        android:fillColor="#000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

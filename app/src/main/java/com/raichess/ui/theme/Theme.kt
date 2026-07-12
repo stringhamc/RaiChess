@@ -53,21 +53,23 @@ private val ChessColorScheme = darkColorScheme(
  * Chess-specific colors for board and pieces
  */
 object ChessColors {
-    // Board squares
-    val LightSquare = Color(0xFFFFFFFF)
-    val DarkSquare = Color(0xFF000000)
+    // Board squares: soft grays instead of pure white/black so the
+    // two-tone outlined pieces contrast on both square colors
+    val LightSquare = Color(0xFFE3E3E3)
+    val DarkSquare = Color(0xFF3D3D3D)
     val SquareBorder = Color(0xFF888888)
 
-    // Selection and highlighting
-    val SelectedSquare = Color(0xFF666666)
-    val LegalMoveIndicator = Color(0xFF888888)
-    val LastMove = Color(0xFF444444)
-    val CheckHighlight = Color(0xFFAAAAAA)
+    // Selection and highlighting (grayscale only)
+    val SelectedSquare = Color(0xFF8F8F8F)
+    val LegalMoveIndicator = Color(0xFF8F8F8F)
+    val LastMove = Color(0x559F9F9F)
 
-    // Pieces (using high contrast)
-    val WhitePiece = Color(0xFFFFFFFF)
-    val BlackPiece = Color(0xFF000000)
-    val PieceOutline = Color(0xFF888888)
+    // Grayscale control colors (sliders, switches) — single source of truth
+    val ControlActive = Color(0xFFFFFFFF)
+    val ControlTrackActive = Color(0xFF555555)
+    val ControlThumbInactive = Color(0xFF888888)
+    val ControlTrackInactive = Color(0xFF222222)
+    val SliderInactiveTrack = Color(0xFF333333)
 
     // Evaluation colors (grayscale)
     val EvalPositive = Color(0xFFCCCCCC) // Light gray for advantage

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RaiChess minimal white rook. Original geometric artwork for the
+     pure black & white theme; generated from a single spec. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="45dp"
+    android:height="45dp"
+    android:viewportWidth="45"
+    android:viewportHeight="45">
+    <group android:translateX="0.7" android:translateY="1.1">
+        <path android:pathData="M13,7 h4 v4 h4.5 v-4 h2 v4 h4.5 v-4 h4 v8 l-2.5,3 v14 l2.5,3 v3 h-19 v-3 l2.5,-3 v-14 l-2.5,-3 z" android:fillColor="#42000000" />
+    </group>
+    <path
+        android:pathData="M13,7 h4 v4 h4.5 v-4 h2 v4 h4.5 v-4 h4 v8 l-2.5,3 v14 l2.5,3 v3 h-19 v-3 l2.5,-3 v-14 l-2.5,-3 z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M15.5,18 h14"
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M15.5,32 h14"
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round" />
+</vector>

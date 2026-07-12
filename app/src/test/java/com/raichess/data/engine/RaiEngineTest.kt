@@ -80,6 +80,14 @@ class RaiEngineTest {
     }
 
     @Test
+    fun `weakest settings blunder more than mid settings`() {
+        // The 400-600 beginner band is near-random by design
+        assertTrue(RaiEngine(450).blunderChance > RaiEngine(900).blunderChance)
+        assertTrue(RaiEngine(650).blunderChance > RaiEngine(900).blunderChance)
+        assertTrue(RaiEngine(450).blunderChance >= 0.5)
+    }
+
+    @Test
     fun `weak engine deviates from the best move on some seeds`() {
         // Hanging queen: the objectively best move is c4xd5. An 800-ELO
         // engine blunders 30% of the time, so across many seeds it must

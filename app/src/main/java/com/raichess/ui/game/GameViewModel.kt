@@ -14,10 +14,15 @@ import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.github.bhlangonijr.chesslib.move.MoveList
 import com.raichess.data.engine.RaiEngine
 import com.raichess.data.repository.PlayerProfileRepository
+import com.raichess.data.repository.PracticeRepository
+import com.raichess.data.repository.SettingsRepository
 import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
+import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.PlayerColor
+import com.raichess.domain.model.UndoPenalty
+import com.raichess.domain.model.canUndo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +46,15 @@ data class GameUiState(
     val playerStats: EloStats? = null,
     val opponentElo: Int = 1250,
     val playerColor: PlayerColor = PlayerColor.WHITE,
+    val gameMode: GameMode = GameMode.RATED,
+    /** Undos used this game (Training mode only). */
+    val undoCount: Int = 0,
+    /** Whether the Undo button is currently actionable. */
+    val canUndo: Boolean = false,
+    /** Increments only when a move is applied — the animation key. Undo and new game never animate. */
+    val moveSeq: Int = 0,
+    // Overwritten from SettingsRepository at construction; on by default
+    val animationsEnabled: Boolean = true,
     /** FEN piece chars ('P', 'k', ...) or null for empty, indexed a1=0 .. h8=63. */
     val squares: List<Char?> = emptyList(),
     val selectedSquare: Int? = null,
@@ -57,18 +71,23 @@ data class GameUiState(
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = PlayerProfileRepository(application)
+    private val practiceRepository = PracticeRepository(application)
+    private val settingsRepository = SettingsRepository(application)
     private var board = Board()
     private var moveList = MoveList()
     private var engine: RaiEngine? = null
     private var gameRecorded = false
     private var gameId = 0
+    private var gameUndoCount = 0
 
     private val _uiState = MutableStateFlow(
         repository.getStats().let { stats ->
             GameUiState(
                 playerStats = stats,
                 // Seed the setup screen with the recommended opponent strength
-                opponentElo = EloConfiguration.getRecommendedOpponentElo(stats.currentElo)
+                opponentElo = EloConfiguration.getRecommendedOpponentElo(stats.currentElo),
+                gameMode = settingsRepository.gameMode,
+                animationsEnabled = settingsRepository.animationsEnabled
             )
         }
     )
@@ -82,6 +101,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPlayerColor(color: PlayerColor) {
         _uiState.value = _uiState.value.copy(playerColor = color)
+    }
+
+    fun setGameMode(mode: GameMode) {
+        settingsRepository.gameMode = mode
+        _uiState.value = _uiState.value.copy(gameMode = mode)
+    }
+
+    fun setAnimationsEnabled(enabled: Boolean) {
+        settingsRepository.animationsEnabled = enabled
+        _uiState.value = _uiState.value.copy(animationsEnabled = enabled)
     }
 
     fun startGame(randomColor: Boolean = false) {
@@ -99,6 +128,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         engine = RaiEngine(state.opponentElo)
         gameRecorded = false
         gameId++
+        gameUndoCount = 0
 
         _uiState.value = state.copy(
             phase = GamePhase.PLAYING,
@@ -112,7 +142,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isAiThinking = false,
             isPlayerInCheck = false,
             ending = null,
-            eloDelta = null
+            eloDelta = null,
+            undoCount = 0,
+            canUndo = false,
+            moveSeq = 0
         )
 
         if (color == PlayerColor.BLACK) {
@@ -145,6 +178,56 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         if (state.phase != GamePhase.PLAYING) return
         finishGame(GameEnding.RESIGNED, GameResult.LOSS)
+    }
+
+    /**
+     * Training-mode takeback: reverts the player's last move and the AI's
+     * reply, and captures the pre-mistake position as practice material —
+     * an undo means the player spotted the problem only after moving.
+     */
+    fun undoMove() {
+        val state = _uiState.value
+        if (!canUndo(
+                mode = state.gameMode,
+                isPlaying = state.phase == GamePhase.PLAYING,
+                isPlayerTurn = state.isPlayerTurn,
+                isAiThinking = state.isAiThinking,
+                moveCount = moveList.size
+            )
+        ) return
+
+        // board and moveList are always mutated together (see applyMove),
+        // so the canUndo moveCount>=2 gate guarantees >=2 plies of history
+        board.undoMove() // AI's reply
+        board.undoMove() // player's mistaken move
+        // Rebuild rather than removeLast(): MoveList caches its SAN encoding
+        val remaining = moveList.toList().dropLast(2)
+        moveList = MoveList().apply { remaining.forEach { add(it) } }
+
+        gameUndoCount++
+        repository.incrementLifetimeUndos()
+        practiceRepository.addMistakePosition(
+            fen = board.fen, // the position as it stood before the mistake
+            sourceMoveNumber = remaining.size / 2 + 1
+        )
+
+        _uiState.value = state.copy(
+            squares = boardSnapshot(),
+            selectedSquare = null,
+            legalTargets = emptySet(),
+            lastMove = remaining.lastOrNull()?.let { LastMove(it.from.ordinal, it.to.ordinal) },
+            moveHistorySan = sanHistory(),
+            isPlayerInCheck = isPlayerInCheck(),
+            undoCount = gameUndoCount,
+            canUndo = canUndo(
+                mode = state.gameMode,
+                isPlaying = true,
+                isPlayerTurn = true,
+                isAiThinking = false,
+                moveCount = remaining.size
+            )
+            // moveSeq deliberately not incremented: undo never animates
+        )
     }
 
     fun backToSetup() {
@@ -186,21 +269,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 applyMove(move)
             }
             if (!checkGameOver()) {
-                _uiState.value = _uiState.value.copy(isAiThinking = false, isPlayerTurn = true)
+                val current = _uiState.value
+                _uiState.value = current.copy(
+                    isAiThinking = false,
+                    isPlayerTurn = true,
+                    canUndo = canUndo(
+                        mode = current.gameMode,
+                        isPlaying = true,
+                        isPlayerTurn = true,
+                        isAiThinking = false,
+                        moveCount = moveList.size
+                    )
+                )
             }
         }
     }
 
     private fun applyMove(move: Move) {
+        // Invariant: every move is doMove'd on the live board so its
+        // internal history stack stays valid for undoMove(). Do not switch
+        // AI move application to a FEN reload.
         board.doMove(move)
         moveList.add(move)
-        _uiState.value = _uiState.value.copy(
+        val state = _uiState.value
+        _uiState.value = state.copy(
             squares = boardSnapshot(),
             selectedSquare = null,
             legalTargets = emptySet(),
             lastMove = LastMove(move.from.ordinal, move.to.ordinal),
             moveHistorySan = sanHistory(),
-            isPlayerInCheck = isPlayerInCheck()
+            isPlayerInCheck = isPlayerInCheck(),
+            moveSeq = state.moveSeq + 1,
+            canUndo = false // re-enabled when the turn returns to the player
         )
     }
 
@@ -229,14 +329,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun finishGame(ending: GameEnding, result: GameResult) {
         if (gameRecorded) return
         gameRecorded = true
-        val (stats, delta) = repository.recordResult(result, _uiState.value.opponentElo)
-        _uiState.value = _uiState.value.copy(
+        val state = _uiState.value
+        // Training-mode undos dock the accuracy input; Rated stays neutral
+        val accuracy = if (state.gameMode == GameMode.TRAINING) {
+            UndoPenalty.accuracyAfterUndos(gameUndoCount)
+        } else {
+            UndoPenalty.NEUTRAL_ACCURACY
+        }
+        val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy)
+        _uiState.value = state.copy(
             phase = GamePhase.GAME_OVER,
             playerStats = stats,
             isAiThinking = false,
             isPlayerTurn = false,
             ending = ending,
-            eloDelta = delta
+            eloDelta = delta,
+            canUndo = false
         )
     }
 

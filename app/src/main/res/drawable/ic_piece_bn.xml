@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RaiChess minimal black knight. Original geometric artwork for the
+     pure black & white theme; generated from a single spec. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="45dp"
+    android:height="45dp"
+    android:viewportWidth="45"
+    android:viewportHeight="45">
+    <group android:translateX="0.7" android:translateY="1.1">
+        <path android:pathData="M30,38 L14,38 C14,31 16,27.5 19,25 C16.5,26.5 13.5,27 12.5,25.5 C11.7,24.2 12.3,22.5 13.5,21 C15.5,18.5 18,16.5 19.5,13.5 C19.8,11.5 20.5,9.5 21.8,8 C22.3,9 22.6,10.2 22.5,11.4 C24.8,10.6 27.6,11.2 29.3,13 C32.5,16.4 33.5,22 33.3,27.5 C33.2,31.5 32,35 30,38 Z" android:fillColor="#42000000" />
+        <path android:pathData="M20.8,15.3 a1.0,1.0 0 1,0 2.0,0 a1.0,1.0 0 1,0 -2.0,0 z" android:fillColor="#42000000" />
+    </group>
+    <path
+        android:pathData="M30,38 L14,38 C14,31 16,27.5 19,25 C16.5,26.5 13.5,27 12.5,25.5 C11.7,24.2 12.3,22.5 13.5,21 C15.5,18.5 18,16.5 19.5,13.5 C19.8,11.5 20.5,9.5 21.8,8 C22.3,9 22.6,10.2 22.5,11.4 C24.8,10.6 27.6,11.2 29.3,13 C32.5,16.4 33.5,22 33.3,27.5 C33.2,31.5 32,35 30,38 Z"
+        android:fillColor="#000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M20.8,15.3 a1.0,1.0 0 1,0 2.0,0 a1.0,1.0 0 1,0 -2.0,0 z"
+        android:fillColor="#FFFFFF" />
+</vector>

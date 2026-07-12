@@ -7,7 +7,7 @@ package com.raichess.domain.model
 object EloCalculator {
 
     const val K_FACTOR = 32 // Standard K-factor for rating changes
-    const val DEFAULT_STARTING_ELO = 1200
+    const val DEFAULT_STARTING_ELO = 600 // beginner-friendly start; rating climbs with wins
     const val MIN_ELO = 400
     const val MAX_ELO = 3000
 
@@ -140,7 +140,8 @@ data class EloConfiguration(
         fun forElo(elo: Int): EloConfiguration {
             return when {
                 elo < 1000 -> EloConfiguration(
-                    targetElo = elo.coerceIn(800, 999),
+                    // Floor matches the opponent slider's 400 minimum
+                    targetElo = elo.coerceIn(400, 999),
                     depth = 1,
                     skillLevel = 0,
                     thinkingTimeMs = 500
@@ -207,7 +208,7 @@ data class EloConfiguration(
          * Slightly above player's level for optimal learning
          */
         fun getRecommendedOpponentElo(playerElo: Int): Int {
-            return (playerElo + 50).coerceIn(800, 2800)
+            return (playerElo + 50).coerceIn(400, 2800)
         }
     }
 
@@ -233,7 +234,9 @@ data class EloStats(
     val wins: Int,
     val losses: Int,
     val draws: Int,
-    val confidenceInterval: Int
+    val confidenceInterval: Int,
+    /** Lifetime Training-mode undos; a rough blunder-awareness signal. */
+    val totalUndos: Int = 0
 ) {
     val winRate: Double
         get() = if (gamesPlayed > 0) wins.toDouble() / gamesPlayed * 100.0 else 0.0

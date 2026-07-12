@@ -13,28 +13,35 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.raichess.data.engine.RaiEngine
 import com.raichess.domain.model.EloStats
+import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.PlayerColor
+import com.raichess.ui.theme.ChessColors
 import kotlin.math.roundToInt
 
 /**
  * Home / new-game setup screen: player rating summary, opponent
- * strength selection, color choice, and start button.
+ * strength selection, game mode, color choice, and start button.
  */
 @Composable
 fun HomeScreen(
     stats: EloStats?,
     opponentElo: Int,
     playerColor: PlayerColor,
+    gameMode: GameMode,
+    animationsEnabled: Boolean,
     onOpponentEloChanged: (Int) -> Unit,
     onPlayerColorChanged: (PlayerColor) -> Unit,
+    onGameModeChanged: (GameMode) -> Unit,
+    onAnimationsChanged: (Boolean) -> Unit,
     onStartGame: (randomColor: Boolean) -> Unit
 ) {
     Column(
@@ -70,14 +77,42 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
+            val undoSuffix = if (stats.totalUndos > 0) " · ${stats.totalUndos} undos" else ""
             Text(
-                text = "${stats.wins}W · ${stats.draws}D · ${stats.losses}L",
+                text = "${stats.wins}W · ${stats.draws}D · ${stats.losses}L$undoSuffix",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary
             )
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Text(
+            text = "Mode",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ChoiceButton("Rated", gameMode == GameMode.RATED) {
+                onGameModeChanged(GameMode.RATED)
+            }
+            ChoiceButton("Training", gameMode == GameMode.TRAINING) {
+                onGameModeChanged(GameMode.TRAINING)
+            }
+        }
+        Text(
+            text = if (gameMode == GameMode.TRAINING) {
+                "Undo allowed — undos are tracked and reduce ELO gains"
+            } else {
+                "No takebacks — full ELO stakes"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(
             text = "Opponent: $opponentElo ELO",
@@ -89,9 +124,9 @@ fun HomeScreen(
             onValueChange = { onOpponentEloChanged((it / 50f).roundToInt() * 50) },
             valueRange = RaiEngine.MIN_ELO.toFloat()..RaiEngine.MAX_ELO.toFloat(),
             colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = Color.White,
-                inactiveTrackColor = Color(0xFF333333)
+                thumbColor = ChessColors.ControlActive,
+                activeTrackColor = ChessColors.ControlActive,
+                inactiveTrackColor = ChessColors.SliderInactiveTrack
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -105,15 +140,46 @@ fun HomeScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ColorChoiceButton("White ♔", playerColor == PlayerColor.WHITE) {
+            ChoiceButton("White ♔", playerColor == PlayerColor.WHITE) {
                 onPlayerColorChanged(PlayerColor.WHITE)
             }
-            ColorChoiceButton("Black ♚", playerColor == PlayerColor.BLACK) {
+            ChoiceButton("Black ♚", playerColor == PlayerColor.BLACK) {
                 onPlayerColorChanged(PlayerColor.BLACK)
             }
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "Move animation",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "150 ms slide · on by default",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            Switch(
+                checked = animationsEnabled,
+                onCheckedChange = onAnimationsChanged,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = ChessColors.ControlActive,
+                    checkedTrackColor = ChessColors.ControlTrackActive,
+                    uncheckedThumbColor = ChessColors.ControlThumbInactive,
+                    uncheckedTrackColor = ChessColors.ControlTrackInactive
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = { onStartGame(false) },
@@ -132,7 +198,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ColorChoiceButton(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ChoiceButton(label: String, selected: Boolean, onClick: () -> Unit) {
     if (selected) {
         Button(onClick = onClick) { Text(label) }
     } else {

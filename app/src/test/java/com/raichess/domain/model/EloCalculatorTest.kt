@@ -83,6 +83,9 @@ class EloCalculatorTest {
     fun `recommended opponent is slightly above player`() {
         assertEquals(1250, EloConfiguration.getRecommendedOpponentElo(1200))
         assertEquals(2800, EloConfiguration.getRecommendedOpponentElo(2900))
+        // Floors at the weakest selectable opponent (400)
+        assertEquals(650, EloConfiguration.getRecommendedOpponentElo(600))
+        assertEquals(400, EloConfiguration.getRecommendedOpponentElo(300))
     }
 
     @Test
