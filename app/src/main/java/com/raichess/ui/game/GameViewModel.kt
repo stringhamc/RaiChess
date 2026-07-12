@@ -12,6 +12,8 @@ import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveConversionException
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.github.bhlangonijr.chesslib.move.MoveList
+import com.raichess.data.engine.ChessEngine
+import com.raichess.data.engine.EngineFactory
 import com.raichess.data.engine.RaiEngine
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
@@ -75,7 +77,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private var board = Board()
     private var moveList = MoveList()
-    private var engine: RaiEngine? = null
+    private var engine: ChessEngine? = null
     private var gameRecorded = false
     private var gameId = 0
     private var gameUndoCount = 0
@@ -125,7 +127,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // never touch the live board even if it is still running
         board = Board()
         moveList = MoveList()
-        engine = RaiEngine(state.opponentElo)
+        // Release the previous game's engine (may hold a WebView) and pick the
+        // engine for this opponent strength (RaiEngine weak band / Stockfish above)
+        engine?.close()
+        engine = EngineFactory.create(getApplication<Application>(), state.opponentElo)
         gameRecorded = false
         gameId++
         gameUndoCount = 0
@@ -235,6 +240,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             phase = GamePhase.SETUP,
             playerStats = repository.getStats()
         )
+    }
+
+    override fun onCleared() {
+        engine?.close()
+        super.onCleared()
     }
 
     private fun playPlayerMove(fromIndex: Int, toIndex: Int) {

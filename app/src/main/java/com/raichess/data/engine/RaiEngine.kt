@@ -31,7 +31,7 @@ import kotlin.random.Random
 class RaiEngine(
     targetElo: Int,
     private val random: Random = Random.Default
-) {
+) : ChessEngine {
 
     private val elo = targetElo.coerceIn(MIN_ELO, MAX_ELO)
 
@@ -70,7 +70,7 @@ class RaiEngine(
      * Returns null if the game is over (no legal moves).
      * The board is left in its original state.
      */
-    fun selectMove(board: Board): Move? {
+    override fun selectMove(board: Board): Move? {
         val legalMoves = MoveGenerator.generateLegalMoves(board)
         if (legalMoves.isEmpty()) return null
         if (legalMoves.size == 1) return legalMoves.first()

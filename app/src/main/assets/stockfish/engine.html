@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script>
+  // Runs Stockfish.js (WASM) in a Web Worker and bridges UCI to/from the
+  // Android host via the injected `AndroidEngine` @JavascriptInterface.
+  var engine = null;
+  try {
+    engine = new Worker('stockfish.js');
+    engine.onmessage = function (e) {
+      var line = (typeof e.data === 'string') ? e.data : (e.data && e.data.data);
+      if (line && window.AndroidEngine) AndroidEngine.onMessage(line);
+    };
+    engine.onerror = function (e) {
+      if (window.AndroidEngine) AndroidEngine.onError(String((e && e.message) || e));
+    };
+    if (window.AndroidEngine) AndroidEngine.onReady();
+  } catch (err) {
+    if (window.AndroidEngine) AndroidEngine.onError(String(err));
+  }
+
+  // Called from Kotlin via evaluateJavascript("uciCmd('...')").
+  function uciCmd(cmd) {
+    if (engine) engine.postMessage(cmd);
+  }
+</script>
+</body>
+</html>
