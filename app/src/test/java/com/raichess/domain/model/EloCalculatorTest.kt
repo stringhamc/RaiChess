@@ -71,12 +71,12 @@ class EloCalculatorTest {
     }
 
     @Test
-    fun `elo configuration depth increases with target elo`() {
+    fun `elo configuration skill level increases with target elo`() {
         val low = EloConfiguration.forElo(900)
         val mid = EloConfiguration.forElo(1700)
         val high = EloConfiguration.forElo(2700)
-        assertTrue(low.depth < mid.depth)
-        assertTrue(mid.depth < high.depth)
+        assertTrue(low.skillLevel < mid.skillLevel)
+        assertTrue(mid.skillLevel < high.skillLevel)
     }
 
     @Test

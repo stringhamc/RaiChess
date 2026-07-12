@@ -53,6 +53,10 @@ class StockfishWasmEngine(
 
     private enum class State { UNINITIALIZED, READY, FAILED }
 
+    // Not safe for concurrent callers: the clear()/send()/awaitToken() sequence
+    // below shares one output queue, so overlapping selectMove calls would
+    // steal each other's engine lines. GameViewModel drives this from a single
+    // sequential coroutine (one move at a time), which this relies on.
     override fun selectMove(board: Board): Move? {
         return try {
             if (!ensureReady()) return fallback.selectMove(board)
