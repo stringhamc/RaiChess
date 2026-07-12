@@ -167,6 +167,13 @@ class StockfishWasmEngine(
             val view = WebView(appContext)
             view.settings.javaScriptEnabled = true
             view.settings.domStorageEnabled = true
+            // Lock the WebView to local, first-party content. All assets are
+            // served by WebViewAssetLoader via shouldInterceptRequest (which
+            // short-circuits before the network layer), so blocking network
+            // loads can't break asset/WASM loading — it just makes the
+            // "no network, ever" guarantee robust regardless of the manifest.
+            view.settings.blockNetworkLoads = true
+            view.settings.allowFileAccess = false
             view.addJavascriptInterface(Bridge(), "AndroidEngine")
             view.webViewClient = object : WebViewClientCompat() {
                 override fun shouldInterceptRequest(
@@ -275,7 +282,10 @@ class StockfishWasmEngine(
         private const val ASSET_HOST = "appassets.androidplatform.net"
         private const val READY_SENTINEL = "__ready__"
         private const val ERROR_SENTINEL = "__error__"
-        private const val INIT_TIMEOUT_MS = 8000L
+        // Generous: a first-ever game after install pays WebView-provider init
+        // plus a cold WASM compile, which can be slow on low-end devices. Too
+        // short here silently downgrades the game to RaiEngine, so favor waiting.
+        private const val INIT_TIMEOUT_MS = 12000L
         private const val HANDSHAKE_TIMEOUT_MS = 5000L
         private const val BESTMOVE_GRACE_MS = 4000L
         // Max blocking-poll granularity; bounds how long a wait can ignore a

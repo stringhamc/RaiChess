@@ -275,6 +275,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             val move = withContext(Dispatchers.Default) {
+                // ChessEngine.selectMove is single-caller only (see its KDoc):
+                // never launch overlapping AI-move coroutines, or the engine's
+                // shared UCI queue would be raced. The isAiThinking gate on
+                // player input keeps this to one in-flight search at a time.
                 val searchBoard = Board().apply { loadFromFen(positionFen) }
                 currentEngine.selectMove(searchBoard)
             }
