@@ -9,8 +9,13 @@ import com.raichess.data.database.RaiChessDatabase
 import com.raichess.data.database.toDomain
 import com.raichess.data.database.toEntity
 import com.raichess.domain.model.PracticeCategory
+import android.util.Log
 import com.raichess.domain.model.PracticePosition
 import com.raichess.domain.model.PracticePositionStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -37,6 +42,26 @@ class PracticeRepository(context: Context) {
     suspend fun getPositions(): List<PracticePosition> {
         importLegacyIfNeeded()
         return dao.getAll().map { it.toDomain() }
+    }
+
+    /**
+     * Fire-and-forget variant of [addMistakePosition] for in-game callers:
+     * runs on a repository-owned, process-lifetime scope so tearing down
+     * the calling screen right after an undo can't cancel the write and
+     * silently drop the observation (a viewModelScope launch would).
+     */
+    fun recordMistakePosition(
+        fen: String,
+        sourceMoveNumber: Int,
+        sourceGameId: Long? = null
+    ) {
+        writeScope.launch {
+            try {
+                addMistakePosition(fen, sourceMoveNumber, sourceGameId)
+            } catch (e: Exception) {
+                Log.w(TAG, "failed to record mistake position", e)
+            }
+        }
     }
 
     /**
@@ -99,8 +124,13 @@ class PracticeRepository(context: Context) {
     }
 
     companion object {
+        private const val TAG = "PracticeRepository"
         private const val PREFS_NAME = "raichess_practice"
         private const val KEY_POSITIONS = "positions"
         private const val KEY_MIGRATED = "migrated_to_room"
+
+        // Process-lifetime so recordMistakePosition writes survive the
+        // teardown of whichever screen triggered them.
+        private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }

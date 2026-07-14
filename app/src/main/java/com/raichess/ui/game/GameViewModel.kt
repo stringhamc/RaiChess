@@ -221,14 +221,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         gameUndoCount++
         repository.incrementLifetimeUndos()
-        // Snapshot now: the suspend write races further play on the live board
-        val preMistakeFen = board.fen
-        viewModelScope.launch {
-            practiceRepository.addMistakePosition(
-                fen = preMistakeFen, // the position as it stood before the mistake
-                sourceMoveNumber = remaining.size / 2 + 1
-            )
-        }
+        // Process-lifetime write, not viewModelScope: leaving the screen
+        // right after an undo must not cancel the write and drop the
+        // observation
+        practiceRepository.recordMistakePosition(
+            fen = board.fen, // the position as it stood before the mistake
+            sourceMoveNumber = remaining.size / 2 + 1
+        )
 
         _uiState.value = state.copy(
             squares = boardSnapshot(),
