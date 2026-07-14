@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Owns the background post-game analysis work. Runs on an app-lifetime
@@ -31,8 +32,14 @@ object AnalysisCoordinator {
 
     private const val TAG = "AnalysisCoordinator"
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // IO, not Default: analysis time is dominated by blocking waits on the
+    // engine's output queue, and Default's small pool is what the live
+    // game's own move search runs on — analysis must not starve it.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val engineMutex = Mutex()
+    // The PENDING backlog only needs draining once per process; later games
+    // are analyzed by their own saveAndAnalyze call.
+    private val sweepRequested = AtomicBoolean(false)
 
     /**
      * Persist a finished game and analyze it in the background. Fire and
@@ -48,7 +55,7 @@ object AnalysisCoordinator {
             } catch (e: Exception) {
                 // Never let a persistence hiccup surface at game over; the
                 // ELO update has its own (SharedPreferences) path.
-                Log.w(TAG, "failed to save finished game", e)
+                Log.w(TAG, "failed to save or analyze finished game", e)
             }
         }
     }
@@ -60,6 +67,9 @@ object AnalysisCoordinator {
      * N init/teardown cycles.
      */
     fun analyzePendingGames(context: Context) {
+        // MainActivity calls this from onCreate, which re-runs on every
+        // activity re-creation (rotation, theme change) — sweep only once
+        if (!sweepRequested.compareAndSet(false, true)) return
         val appContext = context.applicationContext
         scope.launch {
             val repository = GameRepository(appContext)
