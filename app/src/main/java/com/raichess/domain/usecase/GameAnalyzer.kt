@@ -8,6 +8,7 @@ import com.raichess.data.engine.ChessEngine
 import com.raichess.domain.model.MoveClassification
 import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.PositionAnalysis
+import com.raichess.domain.model.ThemeTag
 
 /**
  * Post-game analysis (TECHNICAL_PLAN.md §B): replays a finished game,
@@ -39,6 +40,8 @@ class GameAnalyzer(
         /** Player moves only; null for the AI's plies. */
         val centipawnLoss: Int?,
         val classification: MoveClassification?,
+        /** Mistake themes (player moves at mistake-or-worse loss only). */
+        val themes: Set<ThemeTag> = emptySet(),
         val depth: Int
     )
 
@@ -95,6 +98,18 @@ class GameAnalyzer(
 
             val isPlayerMove = step.whiteToMove == playerIsWhite
             val playedBest = step.moveLan.lowercase() == step.analysis.bestMoveLan?.lowercase()
+            val themes = if (isPlayerMove) {
+                ThemeTagger.tag(
+                    fenBefore = step.fen,
+                    ply = i,
+                    moveLan = step.moveLan,
+                    analysis = step.analysis,
+                    nextAnalysis = steps.getOrNull(i + 1)?.analysis,
+                    lossCp = loss
+                )
+            } else {
+                emptySet()
+            }
 
             MoveReport(
                 ply = i,
@@ -106,6 +121,7 @@ class GameAnalyzer(
                 bestMoveLan = step.analysis.bestMoveLan,
                 centipawnLoss = if (isPlayerMove) loss else null,
                 classification = if (isPlayerMove) MoveClassifier.classify(loss, playedBest) else null,
+                themes = themes,
                 depth = step.analysis.depth
             )
         }
@@ -125,8 +141,9 @@ class GameAnalyzer(
         /**
          * Bump when the analysis semantics change (thresholds, eval
          * conventions, tagging) so stored rows can be found and re-analyzed.
+         * v2: theme tagging (Phase B).
          */
-        const val VERSION = 1
+        const val VERSION = 2
 
         /** Per-position budget: deep enough to grade honestly, ~15s for a 60-ply game. */
         const val DEFAULT_MOVE_TIME_MS = 250L

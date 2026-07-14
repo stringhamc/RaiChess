@@ -31,7 +31,9 @@ object MoveClassifier {
     const val EVAL_CAP_CP = 1000
 
     private const val INACCURACY_THRESHOLD_CP = 30
-    private const val MISTAKE_THRESHOLD_CP = 100
+
+    /** Public: ThemeTagger and the weakness profile gate on mistake-or-worse. */
+    const val MISTAKE_THRESHOLD_CP = 100
     private const val BLUNDER_THRESHOLD_CP = 300
 
     /**
