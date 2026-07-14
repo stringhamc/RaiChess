@@ -55,6 +55,10 @@ object MoveClassifier {
      * Accuracy percentage from average centipawn loss. Linear and deliberately
      * simple: 0 ACPL = 100%, 100 ACPL (a mistake every move) = 75%, floor at
      * 0. Feeds [EloCalculator]'s moveAccuracy input, where 50 is neutral.
+     *
+     * Intentionally gentler than TECHNICAL_PLAN.md's original `100 - ACPL`
+     * draft, which hit 0% at one pawn of average loss — the plan doc has been
+     * updated to match this coefficient.
      */
     fun accuracyFromAcpl(acplCp: Double): Double =
         max(0.0, 100.0 - acplCp * 0.25)

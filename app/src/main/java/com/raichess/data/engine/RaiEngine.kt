@@ -236,7 +236,10 @@ class RaiEngine(
         // Scores within this many points of MATE_SCORE are mate scores; the
         // ply distance is far smaller than this at any reachable depth.
         private const val MATE_PLY_WINDOW = 1000
-        /** Fixed search depth for [analyze]; deeper than most play bands but still phone-fast. */
+        // Fixed search depth for analyze(). 3 plies only sees immediate
+        // tactics (hanging pieces, one-move threats) — acceptable for a
+        // fallback that exists so analysis degrades rather than disappears
+        // when the Stockfish WASM bridge is unavailable.
         const val ANALYZE_DEPTH = 3
 
         // Piece-square tables (white perspective, rank 8 first)

@@ -23,7 +23,11 @@ interface GameDao {
     @Query("SELECT * FROM positions WHERE gameId = :gameId ORDER BY ply")
     suspend fun positionsForGame(gameId: Long): List<PositionEntity>
 
-    /** Oldest-first so an interrupted backlog drains in play order. */
+    /**
+     * Oldest-first so an interrupted backlog drains in play order. The
+     * 'PENDING' literal must stay in sync with [AnalysisState.PENDING] —
+     * Room queries are raw SQL, so the constant can't be referenced here.
+     */
     @Query("SELECT id FROM games WHERE analysisState = 'PENDING' ORDER BY datePlayed ASC")
     suspend fun pendingAnalysisGameIds(): List<Long>
 

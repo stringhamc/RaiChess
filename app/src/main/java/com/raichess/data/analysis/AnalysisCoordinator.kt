@@ -2,6 +2,8 @@ package com.raichess.data.analysis
 
 import android.content.Context
 import android.util.Log
+import com.raichess.data.database.AnalysisState
+import com.raichess.data.engine.ChessEngine
 import com.raichess.data.engine.EngineFactory
 import com.raichess.data.repository.GameRepository
 import com.raichess.domain.model.CompletedGame
@@ -51,14 +53,22 @@ object AnalysisCoordinator {
         }
     }
 
-    /** Drain games whose analysis never completed (app killed mid-run, ...). */
+    /**
+     * Drain games whose analysis never completed (app killed mid-run, ...).
+     * The whole backlog shares one engine instance — a WebView-backed
+     * Stockfish is expensive to spin up, so a sweep of N games must not pay
+     * N init/teardown cycles.
+     */
     fun analyzePendingGames(context: Context) {
         val appContext = context.applicationContext
         scope.launch {
             val repository = GameRepository(appContext)
             try {
-                repository.pendingAnalysisGameIds()
-                    .forEach { analyzeGame(appContext, repository, it) }
+                val pending = repository.pendingAnalysisGameIds()
+                if (pending.isEmpty()) return@launch
+                withAnalysisEngine(appContext) { engine ->
+                    pending.forEach { analyzeGameWith(engine, repository, it) }
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "pending-analysis sweep failed", e)
             }
@@ -70,29 +80,57 @@ object AnalysisCoordinator {
         repository: GameRepository,
         gameId: Long
     ) {
-        engineMutex.withLock {
-            val game = repository.getGame(gameId) ?: return
-            val movesLan = game.movesLan.split(' ').filter { it.isNotBlank() }
-            val playerIsWhite = game.playerColor == PlayerColor.WHITE.name
+        withAnalysisEngine(appContext) { engine ->
+            analyzeGameWith(engine, repository, gameId)
+        }
+    }
 
+    /**
+     * Run [block] with a fresh full-strength engine under [engineMutex]
+     * (ChessEngine is single-caller, and one engine at a time is also the
+     * right battery/memory behaviour), releasing the engine afterwards.
+     */
+    private suspend fun withAnalysisEngine(
+        appContext: Context,
+        block: suspend (ChessEngine) -> Unit
+    ) {
+        engineMutex.withLock {
             val engine = EngineFactory.createAnalyzer(appContext)
             try {
-                val report = GameAnalyzer(engine).analyze(movesLan, playerIsWhite)
-                if (report != null) {
-                    repository.recordAnalysis(gameId, report)
-                    Log.i(TAG, "analyzed game $gameId: accuracy=${"%.1f".format(report.accuracy)}")
-                } else {
-                    repository.markAnalysisFailed(gameId)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "analysis failed for game $gameId", e)
-                try {
-                    repository.markAnalysisFailed(gameId)
-                } catch (persist: Exception) {
-                    Log.w(TAG, "could not mark game $gameId failed", persist)
-                }
+                block(engine)
             } finally {
                 engine.close()
+            }
+        }
+    }
+
+    /** Analyze one stored game. Caller supplies the engine and holds [engineMutex]. */
+    private suspend fun analyzeGameWith(
+        engine: ChessEngine,
+        repository: GameRepository,
+        gameId: Long
+    ) {
+        val game = repository.getGame(gameId) ?: return
+        // Re-check state: a game saved and analyzed by saveAndAnalyze while a
+        // sweep was waiting on the mutex must not be analyzed twice.
+        if (game.analysisState != AnalysisState.PENDING) return
+        val movesLan = game.movesLan.split(' ').filter { it.isNotBlank() }
+        val playerIsWhite = game.playerColor == PlayerColor.WHITE.name
+
+        try {
+            val report = GameAnalyzer(engine).analyze(movesLan, playerIsWhite)
+            if (report != null) {
+                repository.recordAnalysis(gameId, report)
+                Log.i(TAG, "analyzed game $gameId: accuracy=${"%.1f".format(report.accuracy)}")
+            } else {
+                repository.markAnalysisFailed(gameId)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "analysis failed for game $gameId", e)
+            try {
+                repository.markAnalysisFailed(gameId)
+            } catch (persist: Exception) {
+                Log.w(TAG, "could not mark game $gameId failed", persist)
             }
         }
     }

@@ -8,6 +8,10 @@ import androidx.room.RoomDatabase
 /**
  * App database: game history, per-move analysis, and practice positions —
  * the storage layer of the coaching roadmap (TECHNICAL_PLAN.md Phase 1/3).
+ *
+ * NOTE for the next schema bump: there is deliberately no
+ * fallbackToDestructiveMigration() — this data is the user's game history,
+ * so version 2 must ship a real Migration or the app will crash on update.
  */
 @Database(
     entities = [GameEntity::class, PositionEntity::class, PracticePositionEntity::class],
