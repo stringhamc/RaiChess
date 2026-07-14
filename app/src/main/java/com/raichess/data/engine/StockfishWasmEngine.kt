@@ -137,7 +137,8 @@ class StockfishWasmEngine(
 
     private fun handshake(): Boolean {
         send("uci")
-        if (awaitToken(HANDSHAKE_TIMEOUT_MS) { it == "uciok" } == null) return false
+        // uciok arrives only after the cold WASM compile — allow for that.
+        if (awaitToken(UCIOK_TIMEOUT_MS) { it == "uciok" } == null) return false
         return isReady()
     }
 
@@ -282,10 +283,18 @@ class StockfishWasmEngine(
         private const val ASSET_HOST = "appassets.androidplatform.net"
         private const val READY_SENTINEL = "__ready__"
         private const val ERROR_SENTINEL = "__error__"
-        // Generous: a first-ever game after install pays WebView-provider init
-        // plus a cold WASM compile, which can be slow on low-end devices. Too
-        // short here silently downgrades the game to RaiEngine, so favor waiting.
+        // Guards engine.html loading and the Worker object being constructed —
+        // onReady() fires right after `new Worker(...)` returns, before the WASM
+        // is compiled, so this is fast on any device; keep it comfortably ample.
         private const val INIT_TIMEOUT_MS = 12000L
+        // The cold WASM compile actually lands here: the worker only answers
+        // `uciok` once stockfish.js has loaded and instantiated the module, which
+        // can be several seconds on a low-end device on the first game after
+        // install. Too short silently, permanently downgrades the game to
+        // RaiEngine, so this initial handshake gets a generous budget.
+        private const val UCIOK_TIMEOUT_MS = 15000L
+        // Post-handshake readiness (`isready`/`readyok`): the module is already
+        // loaded by then, so these replies are fast.
         private const val HANDSHAKE_TIMEOUT_MS = 5000L
         private const val BESTMOVE_GRACE_MS = 4000L
         // Max blocking-poll granularity; bounds how long a wait can ignore a
