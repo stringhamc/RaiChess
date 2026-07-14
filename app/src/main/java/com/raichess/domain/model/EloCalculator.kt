@@ -94,6 +94,13 @@ enum class GameResult {
     DRAW,
     LOSS;
 
+    /** Inverse of [fromPgnResult]: the PGN result tag for this outcome. */
+    fun toPgnResult(playerColor: PlayerColor): String = when (this) {
+        DRAW -> "1/2-1/2"
+        WIN -> if (playerColor == PlayerColor.WHITE) "1-0" else "0-1"
+        LOSS -> if (playerColor == PlayerColor.WHITE) "0-1" else "1-0"
+    }
+
     companion object {
         fun fromPgnResult(result: String, playerColor: PlayerColor): GameResult {
             return when (result) {

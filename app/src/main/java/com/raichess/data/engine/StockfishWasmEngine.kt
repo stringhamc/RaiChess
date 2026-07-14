@@ -16,6 +16,7 @@ import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.raichess.domain.model.EloConfiguration
+import com.raichess.domain.model.PositionAnalysis
 import org.json.JSONObject
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -33,7 +34,13 @@ import java.util.concurrent.TimeUnit
 class StockfishWasmEngine(
     context: Context,
     targetElo: Int,
-    private val fallback: ChessEngine
+    private val fallback: ChessEngine,
+    /**
+     * When true this instance is an analyzer, not an opponent: the
+     * skill-limiting UCI options are never sent, so searches run at full
+     * strength. Use [EngineFactory.createAnalyzer] to obtain one.
+     */
+    private val analysisMode: Boolean = false
 ) : ChessEngine {
 
     private val appContext = context.applicationContext
@@ -98,6 +105,65 @@ class StockfishWasmEngine(
         }
     }
 
+    /**
+     * Full-strength evaluation of [board]: runs a normal search and keeps
+     * the deepest exact-score `info` line seen before `bestmove`. Falls back
+     * to [fallback]'s (coarser) analysis if the WASM bridge is unavailable.
+     *
+     * Same single-caller contract as [selectMove] — both share [output].
+     */
+    override fun analyze(board: Board, moveTimeMs: Long): PositionAnalysis? {
+        return try {
+            if (!ensureReady()) return fallbackAnalysis(board, moveTimeMs)
+            if (released) return null
+
+            output.clear()
+            // No ucinewgame between positions of the same game: a warm hash
+            // makes sequential post-game analysis faster and no less exact.
+            send("position fen ${board.fen}")
+            send("go movetime $moveTimeMs")
+
+            // Track the best info line while waiting for the bestmove
+            // terminator. Bound scores (fail-high/low) are only reported
+            // mid-resolution, so exact scores are preferred; multipv is
+            // always 1 here but filtered defensively for when hints add
+            // MultiPV search.
+            var lastInfo: UciInfoParser.UciInfo? = null
+            val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { line ->
+                UciInfoParser.parse(line)?.let { info ->
+                    if (info.multipv == 1 && !info.isBound) lastInfo = info
+                }
+                line.startsWith("bestmove")
+            }
+            if (best == null) {
+                if (released) return null
+                Log.w(TAG, "no bestmove within analysis timeout; using fallback analyzer")
+                return fallbackAnalysis(board, moveTimeMs)
+            }
+
+            val info = lastInfo ?: return fallbackAnalysis(board, moveTimeMs)
+            // Re-validate the engine's move against the real legal set, as
+            // selectMove does; "bestmove (none)" (mate/stalemate) → null.
+            val bestMoveLan = parseUciBestMove(board, best)?.toString()?.lowercase()
+            PositionAnalysis(
+                scoreCp = info.scoreCp,
+                mateIn = info.scoreMate,
+                bestMoveLan = bestMoveLan,
+                pv = info.pv.map { it.lowercase() },
+                depth = info.depth
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "analyze failed; using fallback analyzer", e)
+            fallbackAnalysis(board, moveTimeMs)
+        }
+    }
+
+    /** Serve an analysis from the RaiEngine fallback and remember that we did. */
+    private fun fallbackAnalysis(board: Board, moveTimeMs: Long): PositionAnalysis? {
+        everFellBack = true
+        return fallback.analyze(board, moveTimeMs)
+    }
+
     /** Serve a move from the RaiEngine fallback and remember that we did. */
     private fun fallbackMove(board: Board): Move? {
         everFellBack = true
@@ -124,8 +190,12 @@ class StockfishWasmEngine(
 
         // Apply strength for this ELO. The bundled SF10 build only supports
         // `Skill Level` (UCI_Elo/UCI_LimitStrength came in SF11), so
-        // getUciCommands() sends just that — see EloConfiguration.
-        config.getUciCommands().forEach { send(it) }
+        // getUciCommands() sends just that — see EloConfiguration. Analyzers
+        // stay at full strength: an eval from a skill-capped search would
+        // misgrade the player's moves.
+        if (!analysisMode) {
+            config.getUciCommands().forEach { send(it) }
+        }
         send("setoption name Threads value 1")
         send("setoption name Hash value 16")
         if (!isReady()) return fail("engine not ready after options")
