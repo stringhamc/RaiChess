@@ -25,10 +25,11 @@ interface GameDao {
 
     /**
      * Oldest-first so an interrupted backlog drains in play order. The
-     * 'PENDING' literal must stay in sync with [AnalysisState.PENDING] —
-     * Room queries are raw SQL, so the constant can't be referenced here.
+     * state is interpolated from [AnalysisState.PENDING] — legal in a
+     * Room query because const val interpolation is a compile-time
+     * constant — so a rename can't silently desync the SQL.
      */
-    @Query("SELECT id FROM games WHERE analysisState = 'PENDING' ORDER BY datePlayed ASC")
+    @Query("SELECT id FROM games WHERE analysisState = '${AnalysisState.PENDING}' ORDER BY datePlayed ASC")
     suspend fun pendingAnalysisGameIds(): List<Long>
 
     @Query("UPDATE games SET accuracy = :accuracy, analysisState = :state WHERE id = :gameId")

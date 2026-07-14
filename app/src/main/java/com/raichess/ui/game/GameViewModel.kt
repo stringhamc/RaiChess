@@ -412,6 +412,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 result = result,
                 playerColor = state.playerColor,
                 opponentElo = state.opponentElo,
+                // Relies on recordResult's delta being the exact signed
+                // change it applied (newElo - oldElo); revisit if that
+                // contract ever changes
                 playerEloBefore = eloAfter - eloDelta,
                 playerEloAfter = eloAfter,
                 gameMode = state.gameMode,
