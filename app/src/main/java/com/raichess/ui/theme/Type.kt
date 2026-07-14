@@ -5,11 +5,15 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.Color
 
 /**
- * Minimal typography for the RaiChess app
- * High contrast white text on black background
+ * Minimal typography for the RaiChess app.
+ *
+ * Deliberately no `color` on these styles: text color comes from context
+ * (LocalContentColor / the color scheme), so it's white on the black
+ * background but flips to the container's content color inside components —
+ * e.g. black on the white "Start Game" button. Baking white in here made that
+ * button's label white-on-white and invisible.
  */
 val ChessTypography = Typography(
     // Large display text (ELO rating, big numbers). Light weight so the hero
@@ -21,7 +25,6 @@ val ChessTypography = Typography(
         fontSize = 52.sp,
         lineHeight = 58.sp,
         letterSpacing = (-1).sp,
-        color = Color.White
     ),
     displayMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -29,7 +32,6 @@ val ChessTypography = Typography(
         fontSize = 36.sp,
         lineHeight = 44.sp,
         letterSpacing = 0.sp,
-        color = Color.White
     ),
     displaySmall = TextStyle(
         fontFamily = FontFamily.Default,
@@ -37,7 +39,6 @@ val ChessTypography = Typography(
         fontSize = 28.sp,
         lineHeight = 36.sp,
         letterSpacing = 0.sp,
-        color = Color.White
     ),
 
     // Headlines (screen titles)
@@ -47,7 +48,6 @@ val ChessTypography = Typography(
         fontSize = 32.sp,
         lineHeight = 40.sp,
         letterSpacing = 0.sp,
-        color = Color.White
     ),
     headlineMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -55,7 +55,6 @@ val ChessTypography = Typography(
         fontSize = 24.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp,
-        color = Color.White
     ),
     headlineSmall = TextStyle(
         fontFamily = FontFamily.Default,
@@ -63,7 +62,6 @@ val ChessTypography = Typography(
         fontSize = 20.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp,
-        color = Color.White
     ),
 
     // Titles (section headers)
@@ -73,7 +71,6 @@ val ChessTypography = Typography(
         fontSize = 20.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp,
-        color = Color.White
     ),
     titleMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -81,7 +78,6 @@ val ChessTypography = Typography(
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.15.sp,
-        color = Color.White
     ),
     titleSmall = TextStyle(
         fontFamily = FontFamily.Default,
@@ -89,7 +85,6 @@ val ChessTypography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp,
-        color = Color.White
     ),
 
     // Body text (main content)
@@ -99,7 +94,6 @@ val ChessTypography = Typography(
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.5.sp,
-        color = Color.White
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -107,7 +101,6 @@ val ChessTypography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.25.sp,
-        color = Color.White
     ),
     bodySmall = TextStyle(
         fontFamily = FontFamily.Default,
@@ -115,7 +108,6 @@ val ChessTypography = Typography(
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.4.sp,
-        color = Color.White
     ),
 
     // Labels (buttons, tabs)
@@ -125,7 +117,6 @@ val ChessTypography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp,
-        color = Color.White
     ),
     labelMedium = TextStyle(
         fontFamily = FontFamily.Default,
@@ -133,7 +124,6 @@ val ChessTypography = Typography(
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp,
-        color = Color.White
     ),
     labelSmall = TextStyle(
         fontFamily = FontFamily.Default,
@@ -141,6 +131,5 @@ val ChessTypography = Typography(
         fontSize = 11.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp,
-        color = Color.White
     )
 )
