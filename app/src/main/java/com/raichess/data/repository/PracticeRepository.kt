@@ -5,55 +5,102 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import com.google.gson.reflect.TypeToken
+import com.raichess.data.database.RaiChessDatabase
+import com.raichess.data.database.toDomain
+import com.raichess.data.database.toEntity
 import com.raichess.domain.model.PracticeCategory
 import com.raichess.domain.model.PracticePosition
 import com.raichess.domain.model.PracticePositionStore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 /**
  * Persists practice positions extracted from play (currently:
  * Training-mode undos as MISTAKE_CORRECTION entries).
  *
- * SharedPreferences + Gson for the MVP; the PracticePosition schema
- * mirrors the practice_positions table in TECHNICAL_PLAN.md so the
- * planned Room migration is a field-for-field mapping.
+ * Room-backed (practice_positions), completing the migration the
+ * SharedPreferences MVP was staged for: the legacy JSON blob, if present,
+ * is imported once on first access and the schema is field-for-field the
+ * old [PracticePosition]. List maintenance (FEN dedup, the 200-entry cap)
+ * stays in the pure, tested [PracticePositionStore].
  */
 class PracticeRepository(context: Context) {
 
+    private val appContext = context.applicationContext
+    private val dao = RaiChessDatabase.get(appContext).practiceDao()
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val gson = Gson()
-    private val listType = object : TypeToken<List<PracticePosition>>() {}.type
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    // Serializes read-merge-write updates from concurrent callers
+    private val writeMutex = Mutex()
 
-    fun getPositions(): List<PracticePosition> {
-        val json = prefs.getString(KEY_POSITIONS, null) ?: return emptyList()
-        return try {
-            gson.fromJson<List<PracticePosition>>(json, listType) ?: emptyList()
-        } catch (e: JsonParseException) {
-            // Fail closed on any corrupt/incompatible persisted JSON so a
-            // bad prefs blob can't crash the setup screen on load
-            emptyList()
-        }
+    suspend fun getPositions(): List<PracticePosition> {
+        importLegacyIfNeeded()
+        return dao.getAll().map { it.toDomain() }
     }
 
     /**
      * Record the position a Training-mode undo rolled back to — the board
      * as it stood before the player's mistaken move.
+     *
+     * @param sourceGameId row id in the games table, when known. Undo-time
+     *   captures pass null: the game row is only created at game over.
      */
-    fun addMistakePosition(fen: String, sourceMoveNumber: Int) {
+    suspend fun addMistakePosition(
+        fen: String,
+        sourceMoveNumber: Int,
+        sourceGameId: Long? = null
+    ) {
+        importLegacyIfNeeded()
         val position = PracticePosition(
             id = UUID.randomUUID().toString(),
+            sourceGameId = sourceGameId,
             sourceMoveNumber = sourceMoveNumber,
             fen = fen,
             category = PracticeCategory.MISTAKE_CORRECTION,
             createdAt = System.currentTimeMillis()
         )
-        val updated = PracticePositionStore.withPosition(getPositions(), position)
-        prefs.edit().putString(KEY_POSITIONS, gson.toJson(updated, listType)).apply()
+        writeMutex.withLock {
+            val updated = PracticePositionStore.withPosition(
+                dao.getAll().map { it.toDomain() },
+                position
+            )
+            dao.replaceAll(updated.map { it.toEntity() })
+        }
+    }
+
+    /**
+     * One-time import of the pre-Room SharedPreferences store. The flag is
+     * set even when the blob is absent or corrupt — either way there will
+     * never be anything (more) to import.
+     */
+    private suspend fun importLegacyIfNeeded() {
+        if (prefs.getBoolean(KEY_MIGRATED, false)) return
+        writeMutex.withLock {
+            if (prefs.getBoolean(KEY_MIGRATED, false)) return
+            val json = prefs.getString(KEY_POSITIONS, null)
+            if (json != null) {
+                val legacy = try {
+                    val listType = object : TypeToken<List<PracticePosition>>() {}.type
+                    Gson().fromJson<List<PracticePosition>>(json, listType) ?: emptyList()
+                } catch (e: JsonParseException) {
+                    // Fail closed on a corrupt blob, exactly as the old store did
+                    emptyList()
+                }
+                if (legacy.isNotEmpty()) {
+                    dao.insertAll(legacy.map { it.toEntity() })
+                }
+            }
+            prefs.edit()
+                .putBoolean(KEY_MIGRATED, true)
+                .remove(KEY_POSITIONS)
+                .apply()
+        }
     }
 
     companion object {
         private const val PREFS_NAME = "raichess_practice"
         private const val KEY_POSITIONS = "positions"
+        private const val KEY_MIGRATED = "migrated_to_room"
     }
 }

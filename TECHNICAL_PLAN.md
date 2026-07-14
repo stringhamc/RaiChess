@@ -405,7 +405,10 @@ class EloCalculator {
 
 3. **Calculate overall metrics:**
    - Average centipawn loss (ACPL)
-   - Accuracy percentage: `max(0, 100 - ACPL)`
+   - Accuracy percentage: `max(0, 100 - ACPL * 0.25)` (ACPL in centipawns;
+     implemented in `MoveClassifier.accuracyFromAcpl` — deliberately gentler
+     than the earlier `100 - ACPL` draft, which floored to 0% at 1 pawn of
+     average loss)
    - Move quality distribution
 
 4. **Identify critical moments:**
@@ -413,10 +416,10 @@ class EloCalculator {
    - Missed tactical opportunities
    - Time pressure mistakes (if timed)
 
-**Example Accuracy Calculation:**
+**Accuracy Calculation (as implemented in `MoveClassifier`):**
 ```kotlin
-fun calculateAccuracy(centipawnLoss: Double): Double {
-    return max(0.0, 100.0 - (centipawnLoss * 2.5))
+fun accuracyFromAcpl(acplCp: Double): Double {
+    return max(0.0, 100.0 - acplCp * 0.25)
 }
 ```
 

@@ -7,6 +7,7 @@ import com.github.bhlangonijr.chesslib.Side
 import com.github.bhlangonijr.chesslib.Square
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
+import com.raichess.domain.model.PositionAnalysis
 import kotlin.math.max
 import kotlin.random.Random
 
@@ -102,6 +103,60 @@ class RaiEngine(
         return candidates[random.nextInt(candidates.size)].first
     }
 
+    /**
+     * Full-strength analysis regardless of this engine's target ELO: a plain
+     * fixed-depth alpha-beta over the root with no blunder roll and no
+     * candidate window. Serves as the offline fallback analyzer when the
+     * Stockfish WASM bridge is unavailable — coarse (depth [ANALYZE_DEPTH],
+     * material + piece-square eval) but honest. [moveTimeMs] is ignored:
+     * this search is depth-bound, not time-bound.
+     */
+    override fun analyze(board: Board, moveTimeMs: Long): PositionAnalysis? {
+        val legalMoves = MoveGenerator.generateLegalMoves(board)
+        if (legalMoves.isEmpty()) return null
+
+        var bestMove: Move? = null
+        var bestScore = -INFINITY
+        var alpha = -INFINITY
+        for (move in legalMoves.sortedByDescending { captureValue(board, it) }) {
+            board.doMove(move)
+            val score = -negamax(board, ANALYZE_DEPTH - 1, -INFINITY, -alpha, 1)
+            board.undoMove()
+            if (score > bestScore) {
+                bestScore = score
+                bestMove = move
+            }
+            alpha = max(alpha, score)
+        }
+
+        val mateIn = mateInMoves(bestScore)
+        val bestLan = bestMove?.toString()?.lowercase()
+        return PositionAnalysis(
+            scoreCp = if (mateIn == null) bestScore else null,
+            mateIn = mateIn,
+            bestMoveLan = bestLan,
+            pv = listOfNotNull(bestLan),
+            depth = ANALYZE_DEPTH
+        )
+    }
+
+    /**
+     * Convert a root negamax score into moves-to-mate, or null for a
+     * non-mate score. Mate scores are MATE_SCORE minus the mating ply (see
+     * [negamax]), so the ply count is recoverable from the magnitude.
+     */
+    private fun mateInMoves(score: Int): Int? {
+        if (score > MATE_SCORE - MATE_PLY_WINDOW) {
+            val plies = MATE_SCORE - score
+            return (plies + 1) / 2
+        }
+        if (score < -(MATE_SCORE - MATE_PLY_WINDOW)) {
+            val plies = MATE_SCORE + score
+            return -((plies + 1) / 2)
+        }
+        return null
+    }
+
     private fun negamax(board: Board, depth: Int, alphaIn: Int, beta: Int, ply: Int): Int {
         if (board.isMated) return -(MATE_SCORE - ply)
         if (board.isDraw) return 0
@@ -178,6 +233,14 @@ class RaiEngine(
         const val MAX_ELO = 2800
         private const val INFINITY = 1_000_000
         private const val MATE_SCORE = 100_000
+        // Scores within this many points of MATE_SCORE are mate scores; the
+        // ply distance is far smaller than this at any reachable depth.
+        private const val MATE_PLY_WINDOW = 1000
+        // Fixed search depth for analyze(). 3 plies only sees immediate
+        // tactics (hanging pieces, one-move threats) — acceptable for a
+        // fallback that exists so analysis degrades rather than disappears
+        // when the Stockfish WASM bridge is unavailable.
+        const val ANALYZE_DEPTH = 3
 
         // Piece-square tables (white perspective, rank 8 first)
         private val PAWN_TABLE = intArrayOf(

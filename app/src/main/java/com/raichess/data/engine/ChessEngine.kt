@@ -2,6 +2,7 @@ package com.raichess.data.engine
 
 import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.move.Move
+import com.raichess.domain.model.PositionAnalysis
 
 /**
  * A chess opponent. Implemented by the pure-Kotlin [RaiEngine] (weak/beginner
@@ -24,6 +25,20 @@ interface ChessEngine {
      * by driving the engine from a single coroutine.
      */
     fun selectMove(board: Board): Move?
+
+    /**
+     * Evaluate the position on [board] at full strength: score for the side
+     * to move plus the best continuation found. Returns null when analysis
+     * is unavailable (no legal moves, or the implementation cannot analyze).
+     *
+     * Unlike [selectMove] this is never strength-limited — it powers
+     * post-game analysis and coaching, where an honest eval is the point.
+     * Same threading contract as [selectMove]: single sequential caller, off
+     * the UI thread, and [board] is left in its original state.
+     *
+     * @param moveTimeMs search budget; fixed-depth implementations may ignore it
+     */
+    fun analyze(board: Board, moveTimeMs: Long): PositionAnalysis? = null
 
     /**
      * Short human-readable label for the engine currently producing moves,

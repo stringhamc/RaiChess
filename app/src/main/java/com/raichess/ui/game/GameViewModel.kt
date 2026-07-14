@@ -12,16 +12,19 @@ import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveConversionException
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.github.bhlangonijr.chesslib.move.MoveList
+import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.data.engine.ChessEngine
 import com.raichess.data.engine.EngineFactory
 import com.raichess.data.engine.RaiEngine
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.SettingsRepository
+import com.raichess.domain.model.CompletedGame
 import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.PgnBuilder
 import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.model.UndoPenalty
 import com.raichess.domain.model.canUndo
@@ -218,10 +221,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         gameUndoCount++
         repository.incrementLifetimeUndos()
-        practiceRepository.addMistakePosition(
-            fen = board.fen, // the position as it stood before the mistake
-            sourceMoveNumber = remaining.size / 2 + 1
-        )
+        // Snapshot now: the suspend write races further play on the live board
+        val preMistakeFen = board.fen
+        viewModelScope.launch {
+            practiceRepository.addMistakePosition(
+                fen = preMistakeFen, // the position as it stood before the mistake
+                sourceMoveNumber = remaining.size / 2 + 1
+            )
+        }
 
         _uiState.value = state.copy(
             squares = boardSnapshot(),
@@ -363,6 +370,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             UndoPenalty.NEUTRAL_ACCURACY
         }
         val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy)
+        persistFinishedGame(state, result, eloAfter = stats.currentElo, eloDelta = delta)
         _uiState.value = state.copy(
             phase = GamePhase.GAME_OVER,
             playerStats = stats,
@@ -371,6 +379,48 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             ending = ending,
             eloDelta = delta,
             canUndo = false
+        )
+    }
+
+    /**
+     * Persist the finished game and queue its background analysis
+     * (TECHNICAL_PLAN.md Phase 1/3). Fire-and-forget on an app-lifetime
+     * scope inside the coordinator, so leaving this screen can't lose the
+     * game or cancel its analysis. Games with no moves (an instant resign)
+     * have nothing to store or analyze and are skipped.
+     */
+    private fun persistFinishedGame(
+        state: GameUiState,
+        result: GameResult,
+        eloAfter: Int,
+        eloDelta: Int
+    ) {
+        val sanMoves = sanHistory()
+        if (sanMoves.isEmpty()) return
+        val now = System.currentTimeMillis()
+        AnalysisCoordinator.saveAndAnalyze(
+            getApplication(),
+            CompletedGame(
+                pgn = PgnBuilder.build(
+                    sanMoves = sanMoves,
+                    result = result,
+                    playerColor = state.playerColor,
+                    opponentElo = state.opponentElo,
+                    datePlayed = now
+                ),
+                movesLan = moveList.map { it.toString().lowercase() },
+                result = result,
+                playerColor = state.playerColor,
+                opponentElo = state.opponentElo,
+                // Relies on recordResult's delta being the exact signed
+                // change it applied (newElo - oldElo); revisit if that
+                // contract ever changes
+                playerEloBefore = eloAfter - eloDelta,
+                playerEloAfter = eloAfter,
+                gameMode = state.gameMode,
+                undoCount = gameUndoCount,
+                datePlayed = now
+            )
         )
     }
 

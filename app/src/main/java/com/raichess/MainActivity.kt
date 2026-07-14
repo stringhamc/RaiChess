@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.ui.game.GamePhase
 import com.raichess.ui.game.GameScreen
 import com.raichess.ui.game.GameViewModel
@@ -26,6 +27,9 @@ import com.raichess.ui.theme.RaiChessTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Finish any post-game analysis a previous process didn't complete
+        // (fire-and-forget; no-op when nothing is pending)
+        AnalysisCoordinator.analyzePendingGames(applicationContext)
         setContent {
             RaiChessTheme {
                 Surface(

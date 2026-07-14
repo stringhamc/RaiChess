@@ -28,4 +28,18 @@ object EngineFactory {
             RaiEngine(targetElo)
         }
     }
+
+    /**
+     * Full-strength analyzer for post-game analysis and coaching: Stockfish
+     * with no skill limiting, falling back to RaiEngine's fixed-depth
+     * analysis if the WASM/WebView bridge fails. Callers own the instance
+     * and must [ChessEngine.close] it when the analysis run is done.
+     */
+    fun createAnalyzer(context: Context): ChessEngine =
+        StockfishWasmEngine(
+            context,
+            targetElo = RaiEngine.MAX_ELO,
+            fallback = RaiEngine(RaiEngine.MAX_ELO),
+            analysisMode = true
+        )
 }
