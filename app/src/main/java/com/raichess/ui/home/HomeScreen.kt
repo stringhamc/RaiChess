@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.raichess.BuildConfig
 import com.raichess.data.engine.RaiEngine
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
@@ -226,6 +227,15 @@ fun HomeScreen(
         ) {
             Text("Random Color")
         }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        // Visible build marker so it's unambiguous which APK is installed.
+        Text(
+            text = "v${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.labelSmall,
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.secondary
+        )
     }
 }
 
