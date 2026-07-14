@@ -120,83 +120,78 @@ enum class PlayerColor {
 }
 
 /**
- * ELO configuration for Stockfish
- * Maps target ELO to Stockfish UCI parameters
- *
- * Note: these depth/skillLevel/thinkingTime mappings are for the planned
- * Stockfish UCI integration and are NOT read by the interim RaiEngine,
- * which derives its own strength scaling from the target ELO.
+ * ELO configuration for Stockfish.
+ * Maps a target ELO to the UCI parameters used by [StockfishWasmEngine]:
+ * [skillLevel] (0–20) governs playing strength and [thinkingTimeMs] seeds the
+ * per-move search budget (the engine then coerces it into its own bounds).
+ * RaiEngine does not read this — it derives its own scaling from the target ELO.
  */
 data class EloConfiguration(
     val targetElo: Int,
-    val depth: Int,
     val skillLevel: Int,
     val thinkingTimeMs: Long
 ) {
     companion object {
         /**
-         * Get Stockfish configuration for target ELO
+         * Get Stockfish configuration for a target ELO.
+         *
+         * In-app this is only called for the Stockfish band (targetElo >=
+         * EngineFactory.STOCKFISH_MIN_ELO); EngineFactory routes weaker
+         * opponents to RaiEngine instead. The sub-1350 branches below are
+         * therefore unreachable via the app and exist only to keep this a
+         * complete ELO->config mapping (and are exercised directly by tests).
          */
         fun forElo(elo: Int): EloConfiguration {
             return when {
                 elo < 1000 -> EloConfiguration(
-                    // Floor matches the opponent slider's 400 minimum
+                    // Clamped to the app's 400 opponent floor for a sane
+                    // targetElo when called directly below the Stockfish band.
                     targetElo = elo.coerceIn(400, 999),
-                    depth = 1,
                     skillLevel = 0,
                     thinkingTimeMs = 500
                 )
                 elo < 1200 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 2,
                     skillLevel = 3,
                     thinkingTimeMs = 800
                 )
                 elo < 1400 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 3,
                     skillLevel = 6,
                     thinkingTimeMs = 1000
                 )
                 elo < 1600 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 5,
                     skillLevel = 9,
                     thinkingTimeMs = 1500
                 )
                 elo < 1800 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 8,
                     skillLevel = 12,
                     thinkingTimeMs = 2000
                 )
                 elo < 2000 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 10,
                     skillLevel = 15,
                     thinkingTimeMs = 3000
                 )
                 elo < 2200 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 12,
                     skillLevel = 18,
                     thinkingTimeMs = 4000
                 )
                 elo < 2400 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 15,
                     skillLevel = 20,
                     thinkingTimeMs = 5000
                 )
                 elo < 2600 -> EloConfiguration(
                     targetElo = elo,
-                    depth = 18,
                     skillLevel = 20,
                     thinkingTimeMs = 7000
                 )
                 else -> EloConfiguration(
                     targetElo = elo.coerceIn(2600, 3000),
-                    depth = 20,
                     skillLevel = 20,
                     thinkingTimeMs = 10000
                 )
@@ -213,12 +208,17 @@ data class EloConfiguration(
     }
 
     /**
-     * Get UCI commands to configure Stockfish
+     * Get UCI commands to configure the bundled Stockfish's strength.
+     *
+     * NOTE: the bundled Stockfish 10 (2019) WASM build predates the
+     * UCI_Elo/UCI_LimitStrength options (added in SF11), so those are rejected
+     * as "No such option" and must NOT be sent. Strength is governed solely by
+     * `Skill Level` (0–20), which this build does support. [skillLevel] is
+     * mapped from the target ELO in [forElo], monotonically increasing with the
+     * requested rating so a higher slider still yields a stronger opponent.
      */
     fun getUciCommands(): List<String> {
         return listOf(
-            "setoption name UCI_LimitStrength value true",
-            "setoption name UCI_Elo value $targetElo",
             "setoption name Skill Level value $skillLevel"
         )
     }

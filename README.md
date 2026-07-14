@@ -61,7 +61,7 @@ An offline-first Android chess application with Stockfish AI, ELO-based difficul
 - **UI Framework:** Jetpack Compose
 - **Architecture:** MVVM with Clean Architecture
 - **Database:** Room (SQLite)
-- **Chess Engine:** Stockfish 16
+- **Chess Engine:** Stockfish (WASM, run in a headless WebView — no NDK) for the strong band, with a pure-Kotlin RaiEngine for the beginner band
 - **Chess Library:** chesslib for move validation and PGN parsing
 - **Min SDK:** API 24 (Android 7.0)
 
@@ -74,7 +74,7 @@ app/
 │   │   ├── data/
 │   │   │   ├── database/          # Room database, DAOs, entities
 │   │   │   ├── repository/        # Data repositories
-│   │   │   └── engine/            # Stockfish integration
+│   │   │   └── engine/            # ChessEngine: RaiEngine + StockfishWasmEngine
 │   │   ├── domain/
 │   │   │   ├── model/             # Domain models
 │   │   │   └── usecase/           # Business logic
@@ -83,7 +83,7 @@ app/
 │   │       ├── analysis/          # Analysis screen
 │   │       ├── practice/          # Practice mode
 │   │       └── history/           # Game history
-│   ├── cpp/                       # Stockfish native library
+│   ├── assets/stockfish/          # Stockfish WASM + engine.html UCI loader
 │   └── res/                       # Resources
 └── build.gradle
 ```
@@ -94,8 +94,10 @@ app/
 
 - Android Studio Hedgehog or newer
 - Android SDK 24+
-- NDK (for Stockfish compilation)
 - Git
+
+No NDK required: Stockfish ships as a prebuilt WebAssembly asset, so there is
+no native compilation step.
 
 ### Installation
 
@@ -107,34 +109,19 @@ cd raichess
 
 2. Open in Android Studio
 
-3. Build the Stockfish native library:
-```bash
-cd app/src/main/cpp/stockfish
-./build.sh
-```
+3. Sync Gradle and build the project
 
-4. Sync Gradle and build the project
+4. Run on device or emulator
 
-5. Run on device or emulator
+## Stockfish (WASM, no NDK)
 
-## Building Stockfish
-
-The app includes Stockfish as a native library. To build it:
-
-```bash
-# Ensure NDK is installed
-export ANDROID_NDK=/path/to/ndk
-
-# Build for all architectures
-cd app/src/main/cpp/stockfish
-./build-android.sh
-```
-
-This will create binaries for:
-- arm64-v8a
-- armeabi-v7a
-- x86_64
-- x86
+Rather than compiling Stockfish C++ per-ABI with the NDK, the app bundles a
+prebuilt Stockfish WebAssembly build under `app/src/main/assets/stockfish/`
+(`stockfish.js` + `stockfish.wasm`, plus `engine.html`). At runtime a headless
+`WebView` loads `engine.html` and drives the engine over UCI through a small
+JavaScript bridge (`StockfishWasmEngine`). Because WASM is architecture-
+independent, one asset set covers every device and no per-ABI binary is needed;
+assets are served locally via `WebViewAssetLoader`, so play stays fully offline.
 
 ## Usage
 
@@ -180,13 +167,17 @@ ELO Change = K-Factor * (Adjusted Actual Score - Expected Score)
 
 ## Stockfish Configuration
 
-The app uses UCI commands to configure Stockfish for different ELO levels:
+Stockfish is used for the strong band (ELO ≥ 1350); the beginner band uses
+RaiEngine. Strength is set with a single UCI command:
 
 ```kotlin
-setoption name UCI_LimitStrength value true
-setoption name UCI_Elo value [800-2800]
 setoption name Skill Level value [0-20]
 ```
+
+The bundled Stockfish 10 WASM build predates the `UCI_Elo`/`UCI_LimitStrength`
+options (added in Stockfish 11), so those are not used — the target ELO is
+mapped to a `Skill Level` (0–20) in `EloConfiguration.forElo`, monotonically
+increasing so a higher slider yields a stronger opponent.
 
 ## Database Schema
 
@@ -221,7 +212,7 @@ Contributions are welcome! Please follow these guidelines:
 ### Phase 1: MVP (Weeks 1-6)
 - [x] Project setup and architecture
 - [x] Chess board UI
-- [ ] Stockfish integration (interim: built-in RaiEngine, a Kotlin alpha-beta engine with ELO-scaled strength)
+- [x] Stockfish integration (bundled Stockfish WASM run in a headless WebView — no NDK; RaiEngine kept for the weak 400-1300 band, Stockfish above)
 - [x] Basic game play (play vs AI, ELO tracking, resign, auto-queen promotion)
 - [ ] Database setup
 - [ ] Simple analysis

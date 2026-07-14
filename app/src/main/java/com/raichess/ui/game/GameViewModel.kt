@@ -12,6 +12,8 @@ import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveConversionException
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.github.bhlangonijr.chesslib.move.MoveList
+import com.raichess.data.engine.ChessEngine
+import com.raichess.data.engine.EngineFactory
 import com.raichess.data.engine.RaiEngine
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
@@ -60,6 +62,10 @@ data class GameUiState(
     val selectedSquare: Int? = null,
     val legalTargets: Set<Int> = emptySet(),
     val lastMove: LastMove? = null,
+    /** True when [lastMove] was played by the AI opponent (highlight distinctly). */
+    val lastMoveByOpponent: Boolean = false,
+    /** Label of the engine actually playing ("RaiEngine" / "Stockfish" / fallback). */
+    val engineLabel: String = "RaiEngine",
     val moveHistorySan: List<String> = emptyList(),
     val isPlayerTurn: Boolean = false,
     val isAiThinking: Boolean = false,
@@ -75,7 +81,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private var board = Board()
     private var moveList = MoveList()
-    private var engine: RaiEngine? = null
+    private var engine: ChessEngine? = null
     private var gameRecorded = false
     private var gameId = 0
     private var gameUndoCount = 0
@@ -125,7 +131,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // never touch the live board even if it is still running
         board = Board()
         moveList = MoveList()
-        engine = RaiEngine(state.opponentElo)
+        // Release the previous game's engine (may hold a WebView) and pick the
+        // engine for this opponent strength (RaiEngine weak band / Stockfish above)
+        engine?.close()
+        val newEngine = EngineFactory.create(getApplication<Application>(), state.opponentElo)
+        engine = newEngine
         gameRecorded = false
         gameId++
         gameUndoCount = 0
@@ -137,6 +147,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             selectedSquare = null,
             legalTargets = emptySet(),
             lastMove = null,
+            lastMoveByOpponent = false,
+            engineLabel = newEngine.activeEngineLabel,
             moveHistorySan = emptyList(),
             isPlayerTurn = color == PlayerColor.WHITE,
             isAiThinking = false,
@@ -216,6 +228,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             selectedSquare = null,
             legalTargets = emptySet(),
             lastMove = remaining.lastOrNull()?.let { LastMove(it.from.ordinal, it.to.ordinal) },
+            lastMoveByOpponent = remaining.isNotEmpty() &&
+                isOpponentMove(remaining.size - 1, state.playerColor),
             moveHistorySan = sanHistory(),
             isPlayerInCheck = isPlayerInCheck(),
             undoCount = gameUndoCount,
@@ -237,6 +251,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    override fun onCleared() {
+        engine?.close()
+        super.onCleared()
+    }
+
     private fun playPlayerMove(fromIndex: Int, toIndex: Int) {
         val move = findLegalMove(fromIndex, toIndex) ?: return
         applyMove(move)
@@ -256,6 +275,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             val move = withContext(Dispatchers.Default) {
+                // ChessEngine.selectMove is single-caller only (see its KDoc):
+                // never launch overlapping AI-move coroutines, or the engine's
+                // shared UCI queue would be raced. The isAiThinking gate on
+                // player input keeps this to one in-flight search at a time.
                 val searchBoard = Board().apply { loadFromFen(positionFen) }
                 currentEngine.selectMove(searchBoard)
             }
@@ -273,6 +296,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = current.copy(
                     isAiThinking = false,
                     isPlayerTurn = true,
+                    // Reflect a mid-game Stockfish->RaiEngine fallback in the label
+                    engineLabel = currentEngine.activeEngineLabel,
                     canUndo = canUndo(
                         mode = current.gameMode,
                         isPlaying = true,
@@ -297,6 +322,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             selectedSquare = null,
             legalTargets = emptySet(),
             lastMove = LastMove(move.from.ordinal, move.to.ordinal),
+            lastMoveByOpponent = isOpponentMove(moveList.size - 1, state.playerColor),
             moveHistorySan = sanHistory(),
             isPlayerInCheck = isPlayerInCheck(),
             moveSeq = state.moveSeq + 1,
@@ -370,6 +396,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Multiple matches means promotion; auto-queen for the MVP
         return matches.firstOrNull { it.promotion.pieceType == PieceType.QUEEN }
             ?: matches.first()
+    }
+
+    /**
+     * Whether the move at [moveIndex] (0 = White's first) was played by the AI
+     * opponent, from move parity: White moves the even indices, and the AI is
+     * whichever side the player is not.
+     */
+    private fun isOpponentMove(moveIndex: Int, playerColor: PlayerColor): Boolean {
+        val whiteMoved = moveIndex % 2 == 0
+        val playerIsWhite = playerColor == PlayerColor.WHITE
+        return whiteMoved != playerIsWhite
     }
 
     private fun isPlayerInCheck(): Boolean {

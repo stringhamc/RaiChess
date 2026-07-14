@@ -71,12 +71,30 @@ class EloCalculatorTest {
     }
 
     @Test
-    fun `elo configuration depth increases with target elo`() {
+    fun `elo configuration skill level increases with target elo`() {
         val low = EloConfiguration.forElo(900)
         val mid = EloConfiguration.forElo(1700)
         val high = EloConfiguration.forElo(2700)
-        assertTrue(low.depth < mid.depth)
-        assertTrue(mid.depth < high.depth)
+        assertTrue(low.skillLevel < mid.skillLevel)
+        assertTrue(mid.skillLevel < high.skillLevel)
+    }
+
+    @Test
+    fun `uci commands set only skill level, never the SF11-plus elo options`() {
+        // The bundled Stockfish 10 rejects UCI_Elo/UCI_LimitStrength as
+        // "No such option"; sending them silently breaks strength control.
+        // Guard against a regression that reintroduces them.
+        for (elo in intArrayOf(1350, 1600, 2000, 2400, 2800)) {
+            val commands = EloConfiguration.forElo(elo).getUciCommands()
+            assertTrue(
+                "expected a Skill Level command, got $commands",
+                commands.any { it.contains("Skill Level") }
+            )
+            assertTrue(
+                "must not emit UCI_Elo/UCI_LimitStrength, got $commands",
+                commands.none { it.contains("UCI_Elo") || it.contains("UCI_LimitStrength") }
+            )
+        }
     }
 
     @Test

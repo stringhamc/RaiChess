@@ -79,7 +79,7 @@ fun GameScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "RaiEngine · ${state.opponentElo} ELO" +
+            text = "${state.engineLabel} · ${state.opponentElo} ELO" +
                 if (state.gameMode == GameMode.TRAINING) " · Training" else "",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground
@@ -193,6 +193,7 @@ private fun AnimatedChessBoard(
             selectedSquare = state.selectedSquare,
             legalTargets = state.legalTargets,
             lastMove = state.lastMove,
+            lastMoveByOpponent = state.lastMoveByOpponent,
             checkedKingSquare = if (state.isPlayerInCheck) {
                 findKingSquare(state.squares, state.playerColor)
             } else {
@@ -231,6 +232,7 @@ fun ChessBoard(
     selectedSquare: Int?,
     legalTargets: Set<Int>,
     lastMove: LastMove?,
+    lastMoveByOpponent: Boolean,
     checkedKingSquare: Int?,
     hiddenSquare: Int?,
     flipped: Boolean,
@@ -251,14 +253,15 @@ fun ChessBoard(
                     val index = rank * 8 + file
                     val isBottomRow = rank == if (flipped) 7 else 0
                     val isLeftColumn = file == if (flipped) 7 else 0
+                    val onLastMove = lastMove?.let { index == it.from || index == it.to } ?: false
                     BoardSquare(
                         piece = if (index == hiddenSquare) null else squares.getOrNull(index),
                         isLight = (rank + file) % 2 == 1,
                         isSelected = index == selectedSquare,
                         isLegalTarget = index in legalTargets,
                         isCaptureTarget = index in legalTargets && squares.getOrNull(index) != null,
-                        isLastMove = lastMove?.let { index == it.from || index == it.to }
-                            ?: false,
+                        isLastMove = onLastMove,
+                        isOpponentLastMove = onLastMove && lastMoveByOpponent,
                         isCheckedKing = index == checkedKingSquare,
                         fileLabel = if (isBottomRow) ('a' + file) else null,
                         rankLabel = if (isLeftColumn) ('1' + rank) else null,
@@ -281,6 +284,7 @@ private fun BoardSquare(
     isLegalTarget: Boolean,
     isCaptureTarget: Boolean,
     isLastMove: Boolean,
+    isOpponentLastMove: Boolean,
     isCheckedKing: Boolean,
     fileLabel: Char?,
     rankLabel: Char?,
@@ -300,11 +304,24 @@ private fun BoardSquare(
             .clickable(onClick = onTap)
     ) {
         if (isLastMove && !isSelected) {
+            // The opponent's last move gets a stronger fill plus a ring so the
+            // player can immediately see what the AI just played; the player's
+            // own last move stays subtle.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(ChessColors.LastMove)
+                    .background(
+                        if (isOpponentLastMove) ChessColors.LastMoveOpponent
+                        else ChessColors.LastMove
+                    )
             )
+            if (isOpponentLastMove) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .border(2.dp, ChessColors.LastMoveOpponentRing)
+                )
+            }
         }
         if (isCheckedKing) {
             Box(
@@ -421,7 +438,7 @@ private fun statusText(state: GameUiState): String {
             GameEnding.DRAW -> "Draw." + eloDeltaText(state)
             GameEnding.RESIGNED -> "You resigned." + eloDeltaText(state)
         }
-        state.isAiThinking -> "Move $moveNumber · RaiEngine is thinking…"
+        state.isAiThinking -> "Move $moveNumber · ${state.engineLabel} is thinking…"
         state.isPlayerInCheck -> "Move $moveNumber · Check!"
         state.isPlayerTurn -> "Move $moveNumber · Your move"
         else -> ""

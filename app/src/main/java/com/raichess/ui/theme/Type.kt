@@ -12,13 +12,15 @@ import androidx.compose.ui.graphics.Color
  * High contrast white text on black background
  */
 val ChessTypography = Typography(
-    // Large display text (ELO rating, big numbers)
+    // Large display text (ELO rating, big numbers). Light weight so the hero
+    // number reads as elegant rather than heavy — weight is the main lever in
+    // a monochrome design.
     displayLarge = TextStyle(
         fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 48.sp,
-        lineHeight = 56.sp,
-        letterSpacing = 0.sp,
+        fontWeight = FontWeight.Light,
+        fontSize = 52.sp,
+        lineHeight = 58.sp,
+        letterSpacing = (-1).sp,
         color = Color.White
     ),
     displayMedium = TextStyle(
