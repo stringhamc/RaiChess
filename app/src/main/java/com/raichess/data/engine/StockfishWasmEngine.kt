@@ -118,8 +118,11 @@ class StockfishWasmEngine(
             if (released) return null
 
             output.clear()
-            // No ucinewgame between positions of the same game: a warm hash
-            // makes sequential post-game analysis faster and no less exact.
+            // No ucinewgame between analyze() calls — including across
+            // different games when one engine drains a backlog: the
+            // transposition table is keyed by position, so entries from
+            // another game are irrelevant or helpful, never wrong, and a
+            // warm hash makes sequential analysis faster.
             send("position fen ${board.fen}")
             send("go movetime $moveTimeMs")
 
