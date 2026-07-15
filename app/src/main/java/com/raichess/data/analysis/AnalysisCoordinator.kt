@@ -32,6 +32,9 @@ object AnalysisCoordinator {
 
     private const val TAG = "AnalysisCoordinator"
 
+    /** Max games one pending sweep re-analyzes (~15s of engine time each). */
+    private const val MAX_GAMES_PER_SWEEP = 10
+
     // IO, not Default: analysis time is dominated by blocking waits on the
     // engine's output queue, and Default's small pool is what the live
     // game's own move search runs on — analysis must not starve it.
@@ -76,12 +79,21 @@ object AnalysisCoordinator {
             try {
                 // Analyzer semantics changed (e.g. themes in v2)? Re-analyze
                 // old games so the weakness profile isn't sparse for history.
-                // Bounded (game count), serialized, and once per process.
                 repository.requeueOutdatedAnalyses()
                 val pending = repository.pendingAnalysisGameIds()
                 if (pending.isEmpty()) return@launch
+                // Cap the per-launch batch: a long history re-queued by an
+                // analyzer bump would otherwise mean hours of background
+                // engine time in one sweep. The remainder stays PENDING
+                // (old rows keep serving queries until replaced) and the
+                // next launch continues the drain. Fresh games are analyzed
+                // by saveAndAnalyze directly, never queued behind this.
+                val batch = pending.take(MAX_GAMES_PER_SWEEP)
+                if (pending.size > batch.size) {
+                    Log.i(TAG, "analysis backlog: ${pending.size} games, processing ${batch.size} this launch")
+                }
                 withAnalysisEngine(appContext) { engine ->
-                    pending.forEach { analyzeGameWith(engine, repository, it) }
+                    batch.forEach { analyzeGameWith(engine, repository, it) }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "pending-analysis sweep failed", e)
