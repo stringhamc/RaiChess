@@ -22,6 +22,9 @@ object HintAdvisor {
     /** Captures below this many centipawns don't trigger the material nudge. */
     private const val SIGNIFICANT_CAPTURE_CP = 300
 
+    /** The material nudge also needs the eval to actually favor the mover. */
+    private const val MATERIAL_NUDGE_MIN_EVAL_CP = 150
+
     data class Hint(
         val text: String,
         /** Board square ordinals (a1=0 .. h8=63) to highlight. */
@@ -76,9 +79,14 @@ object HintAdvisor {
         // Reads the destination square, so an en passant capture falls
         // through to the personalized/generic nudge — a known gap in the
         // "prefer under-hinting" direction (and ep never clears the 300cp
-        // significance floor anyway).
+        // significance floor anyway). The eval gate filters out even
+        // trades: queen-takes-queen with a recapture is not "winning
+        // material", and the eval already reflects the exchange honestly.
         val capturedPiece = squares.getOrNull(bestMoveTarget)
-        if (capturedPiece != null && pieceValue(capturedPiece) >= SIGNIFICANT_CAPTURE_CP) {
+        if (capturedPiece != null &&
+            pieceValue(capturedPiece) >= SIGNIFICANT_CAPTURE_CP &&
+            analysis.effectiveCp() >= MATERIAL_NUDGE_MIN_EVAL_CP
+        ) {
             return "You can win material this move — look for captures."
         }
         return when (topWeakness) {

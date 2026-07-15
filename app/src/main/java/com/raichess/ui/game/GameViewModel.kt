@@ -439,32 +439,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 applyMove(move)
             }
             if (!checkGameOver()) {
-                // Baseline for the player's new position: powers instant
-                // hints and the next blunder check
-                val newBaseline = if (coaching) {
-                    val fenNow = board.fen
-                    withContext(Dispatchers.Default) {
-                        engineLock.withLock {
-                            currentEngine.analyze(
-                                Board().apply { loadFromFen(fenNow) },
-                                COACH_ANALYZE_MS
-                            )
-                        }
-                    }
-                } else {
-                    null
-                }
-                if (_uiState.value.phase != GamePhase.PLAYING || gameId != currentGameId) {
-                    return@launch
-                }
-                currentAnalysis = newBaseline
                 val current = _uiState.value
                 _uiState.value = current.copy(
                     isAiThinking = false,
                     isPlayerTurn = true,
                     // Reflect a mid-game Stockfish->RaiEngine fallback in the label
                     engineLabel = currentEngine.activeEngineLabel,
-                    canHint = newBaseline != null,
+                    // Re-enabled once the background baseline lands
+                    canHint = false,
                     // Passive nudge, not an interrupt: the AI has already
                     // replied, and the existing Training undo (which records
                     // the practice position) is the recovery path
@@ -478,6 +460,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         moveCount = moveList.size
                     )
                 )
+                // Baseline for the player's new position (hints + next
+                // blunder check) catches up in the background — turn
+                // handoff must never wait on the coach
+                if (coaching) refreshBaseline()
             }
         }
     }
@@ -664,9 +650,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val TAG = "GameViewModel"
         private const val MIN_AI_MOVE_DELAY_MS = 350L
 
-        // Coach/hint search budget per position. Two of these run per full
-        // move in Training (grade the player's move + baseline the new
-        // position); short enough to hide inside the AI-thinking pause.
+        // Coach/hint search budget per position. Two run per full move in
+        // Training: grading the player's move hides inside the AI-thinking
+        // pause, and the new-position baseline runs after turn handoff —
+        // neither delays the player's control of the board.
         private const val COACH_ANALYZE_MS = 200L
     }
 }

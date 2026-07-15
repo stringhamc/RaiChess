@@ -59,6 +59,14 @@ class HintAdvisorTest {
     }
 
     @Test
+    fun `an even trade does not claim to win material`() {
+        // Best move takes a queen but the eval is level — it's a trade
+        // (Qxq, recapture), not a win, so fall through to the generic nudge
+        val hint = HintAdvisor.hint(1, cp(0, "d1d8"), squares(59 to 'q'), null)!!
+        assertTrue(hint.text.contains("stronger move"))
+    }
+
+    @Test
     fun `pawn captures do not trigger the material cue`() {
         // Best move captures a pawn (100cp < the 300cp significance floor)
         val hint = HintAdvisor.hint(1, cp(80, "d4e5"), squares(36 to 'p'), null)!!
