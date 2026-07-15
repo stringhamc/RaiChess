@@ -1,6 +1,7 @@
 package com.raichess.ui.game
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.bhlangonijr.chesslib.Board
@@ -178,6 +179,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             topWeakness = try {
                 gameRepository.weaknessProfile().weaknesses.firstOrNull()?.theme
             } catch (e: Exception) {
+                // Hints degrade to generic nudges; log so a broken profile
+                // fetch isn't invisible when debugging personalization
+                Log.w(TAG, "weakness profile unavailable", e)
                 null
             }
         }
@@ -659,6 +663,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
+        private const val TAG = "GameViewModel"
         private const val MIN_AI_MOVE_DELAY_MS = 350L
 
         // Coach/hint search budget per position. Two of these run per full

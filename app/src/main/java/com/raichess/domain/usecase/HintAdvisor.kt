@@ -73,6 +73,10 @@ object HintAdvisor {
         if (mate != null && mate > 0) {
             return "You have a forced mate — look for checks."
         }
+        // Reads the destination square, so an en passant capture falls
+        // through to the personalized/generic nudge — a known gap in the
+        // "prefer under-hinting" direction (and ep never clears the 300cp
+        // significance floor anyway).
         val capturedPiece = squares.getOrNull(bestMoveTarget)
         if (capturedPiece != null && pieceValue(capturedPiece) >= SIGNIFICANT_CAPTURE_CP) {
             return "You can win material this move — look for captures."

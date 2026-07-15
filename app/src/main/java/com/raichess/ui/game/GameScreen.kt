@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.MaterialCalculator
 import com.raichess.domain.model.PlayerColor
+import com.raichess.domain.usecase.HintAdvisor
 import com.raichess.ui.theme.ChessColors
 import kotlin.math.roundToInt
 
@@ -142,7 +143,7 @@ fun GameScreen(
                         enabled = state.canHint &&
                             state.isPlayerTurn &&
                             !state.isAiThinking &&
-                            state.hintLevel < 3
+                            state.hintLevel < HintAdvisor.MAX_LEVEL
                     ) {
                         Text(if (state.hintCount > 0) "Hint (${state.hintCount})" else "Hint")
                     }
