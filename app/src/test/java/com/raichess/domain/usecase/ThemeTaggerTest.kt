@@ -98,7 +98,7 @@ class ThemeTaggerTest {
             ply = 58,
             moveLan = "a2a3",
             analysis = cp(-200, "b1b8"),
-            nextAnalysis = cp(450, "h8b8"),
+            nextAnalysis = cp(450, "h1b1"),
             lossCp = 300
         )
         assertTrue(ThemeTag.ALLOWED_TACTIC in tags)
