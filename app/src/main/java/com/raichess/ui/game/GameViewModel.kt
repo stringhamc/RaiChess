@@ -223,7 +223,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         repository.incrementLifetimeUndos()
         // Process-lifetime write, not viewModelScope: leaving the screen
         // right after an undo must not cancel the write and drop the
-        // observation
+        // observation. board.fen must stay an eagerly-evaluated argument —
+        // snapshotting it inside a deferred lambda would race further play
+        // on the live board.
         practiceRepository.recordMistakePosition(
             fen = board.fen, // the position as it stood before the mistake
             sourceMoveNumber = remaining.size / 2 + 1

@@ -37,8 +37,6 @@ class PracticeRepository(context: Context) {
     private val dao = RaiChessDatabase.get(appContext).practiceDao()
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    // Serializes read-merge-write updates from concurrent callers
-    private val writeMutex = Mutex()
 
     suspend fun getPositions(): List<PracticePosition> {
         importLegacyIfNeeded()
@@ -135,5 +133,10 @@ class PracticeRepository(context: Context) {
         // Process-lifetime so recordMistakePosition writes survive the
         // teardown of whichever screen triggered them.
         private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        // Companion-scoped (not per-instance) so read-merge-write updates
+        // stay serialized even if a second screen ever constructs its own
+        // PracticeRepository — all instances share the singleton database.
+        private val writeMutex = Mutex()
     }
 }
