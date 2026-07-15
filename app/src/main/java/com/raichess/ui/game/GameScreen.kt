@@ -56,6 +56,7 @@ fun GameScreen(
     state: GameUiState,
     onSquareTapped: (Int) -> Unit,
     onUndo: () -> Unit,
+    onHint: () -> Unit,
     onResign: () -> Unit,
     onNewGame: () -> Unit
 ) {
@@ -91,6 +92,23 @@ fun GameScreen(
             modifier = Modifier.padding(vertical = 6.dp)
         )
 
+        // Coach line: a hint the player asked for, or a passive warning
+        // that the last move lost serious ground (Training mode only)
+        val coachText = state.hintText?.let { "Hint: $it" }
+            ?: if (state.coachWarning) {
+                "Coach: that last move may have lost ground — consider Undo."
+            } else {
+                null
+            }
+        if (coachText != null) {
+            Text(
+                text = coachText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
+
         CapturedRow(pieces = opponentCaptures, advantage = -playerDiff)
 
         AnimatedChessBoard(
@@ -118,6 +136,15 @@ fun GameScreen(
                 if (state.gameMode == GameMode.TRAINING) {
                     OutlinedButton(onClick = onUndo, enabled = state.canUndo) {
                         Text(if (state.undoCount > 0) "Undo (${state.undoCount})" else "Undo")
+                    }
+                    OutlinedButton(
+                        onClick = onHint,
+                        enabled = state.canHint &&
+                            state.isPlayerTurn &&
+                            !state.isAiThinking &&
+                            state.hintLevel < 3
+                    ) {
+                        Text(if (state.hintCount > 0) "Hint (${state.hintCount})" else "Hint")
                     }
                 }
                 OutlinedButton(onClick = onResign) {
@@ -192,6 +219,7 @@ private fun AnimatedChessBoard(
             squares = state.squares,
             selectedSquare = state.selectedSquare,
             legalTargets = state.legalTargets,
+            hintHighlights = state.hintHighlights,
             lastMove = state.lastMove,
             lastMoveByOpponent = state.lastMoveByOpponent,
             checkedKingSquare = if (state.isPlayerInCheck) {
@@ -231,6 +259,7 @@ fun ChessBoard(
     squares: List<Char?>,
     selectedSquare: Int?,
     legalTargets: Set<Int>,
+    hintHighlights: Set<Int> = emptySet(),
     lastMove: LastMove?,
     lastMoveByOpponent: Boolean,
     checkedKingSquare: Int?,
@@ -262,6 +291,7 @@ fun ChessBoard(
                         isCaptureTarget = index in legalTargets && squares.getOrNull(index) != null,
                         isLastMove = onLastMove,
                         isOpponentLastMove = onLastMove && lastMoveByOpponent,
+                        isHintHighlight = index in hintHighlights,
                         isCheckedKing = index == checkedKingSquare,
                         fileLabel = if (isBottomRow) ('a' + file) else null,
                         rankLabel = if (isLeftColumn) ('1' + rank) else null,
@@ -285,6 +315,7 @@ private fun BoardSquare(
     isCaptureTarget: Boolean,
     isLastMove: Boolean,
     isOpponentLastMove: Boolean,
+    isHintHighlight: Boolean,
     isCheckedKing: Boolean,
     fileLabel: Char?,
     rankLabel: Char?,
@@ -328,6 +359,13 @@ private fun BoardSquare(
                 modifier = Modifier
                     .fillMaxSize()
                     .border(2.5.dp, labelColor)
+            )
+        }
+        if (isHintHighlight) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .border(2.5.dp, ChessColors.LegalMoveIndicator)
             )
         }
         rankLabel?.let {

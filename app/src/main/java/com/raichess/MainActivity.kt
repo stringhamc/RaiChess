@@ -65,6 +65,7 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             state = state,
             onSquareTapped = viewModel::onSquareTapped,
             onUndo = viewModel::undoMove,
+            onHint = viewModel::requestHint,
             onResign = viewModel::resign,
             onNewGame = viewModel::backToSetup
         )

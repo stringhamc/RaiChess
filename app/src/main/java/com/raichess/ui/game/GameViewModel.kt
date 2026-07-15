@@ -16,6 +16,7 @@ import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.data.engine.ChessEngine
 import com.raichess.data.engine.EngineFactory
 import com.raichess.data.engine.RaiEngine
+import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.SettingsRepository
@@ -24,16 +25,22 @@ import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.PgnBuilder
 import com.raichess.domain.model.PlayerColor
+import com.raichess.domain.model.PositionAnalysis
+import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.UndoPenalty
 import com.raichess.domain.model.canUndo
+import com.raichess.domain.usecase.HintAdvisor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
@@ -69,6 +76,17 @@ data class GameUiState(
     val lastMoveByOpponent: Boolean = false,
     /** Label of the engine actually playing ("RaiEngine" / "Stockfish" / fallback). */
     val engineLabel: String = "RaiEngine",
+    /** True when a hint could be offered (Training + a fresh analysis is cached). */
+    val canHint: Boolean = false,
+    /** Rung of the hint ladder revealed for the current position (0 = none). */
+    val hintLevel: Int = 0,
+    val hintText: String? = null,
+    /** Squares highlighted by the current hint (a1=0 .. h8=63). */
+    val hintHighlights: Set<Int> = emptySet(),
+    /** Hints used this game (Training only; docks accuracy like undos). */
+    val hintCount: Int = 0,
+    /** True when the player's last move lost blunder-level ground (Training). */
+    val coachWarning: Boolean = false,
     val moveHistorySan: List<String> = emptyList(),
     val isPlayerTurn: Boolean = false,
     val isAiThinking: Boolean = false,
@@ -82,12 +100,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PlayerProfileRepository(application)
     private val practiceRepository = PracticeRepository(application)
     private val settingsRepository = SettingsRepository(application)
+    private val gameRepository = GameRepository(application)
     private var board = Board()
     private var moveList = MoveList()
     private var engine: ChessEngine? = null
     private var gameRecorded = false
     private var gameId = 0
     private var gameUndoCount = 0
+    private var gameHintCount = 0
+
+    // Serializes every engine call (analyze + selectMove): ChessEngine is
+    // single-caller, and coaching adds analyze() calls that could otherwise
+    // overlap a search (e.g. an undo's baseline refresh racing the next AI move)
+    private val engineLock = Mutex()
+    /** Analysis of the position the player is currently looking at (Training). */
+    private var currentAnalysis: PositionAnalysis? = null
+    /** The player's worst substantive weakness, for personalized rung-1 hints. */
+    private var topWeakness: ThemeTag? = null
 
     private val _uiState = MutableStateFlow(
         repository.getStats().let { stats ->
@@ -142,6 +171,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameRecorded = false
         gameId++
         gameUndoCount = 0
+        gameHintCount = 0
+        currentAnalysis = null
+        // Refresh the weakness profile once per game for personalized hints
+        viewModelScope.launch {
+            topWeakness = try {
+                gameRepository.weaknessProfile().weaknesses.firstOrNull()?.theme
+            } catch (e: Exception) {
+                null
+            }
+        }
 
         _uiState.value = state.copy(
             phase = GamePhase.PLAYING,
@@ -160,11 +199,75 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             eloDelta = null,
             undoCount = 0,
             canUndo = false,
-            moveSeq = 0
+            moveSeq = 0,
+            canHint = false,
+            hintLevel = 0,
+            hintText = null,
+            hintHighlights = emptySet(),
+            hintCount = 0,
+            coachWarning = false
         )
 
         if (color == PlayerColor.BLACK) {
             makeAiMove()
+        } else {
+            // Playing White: seed the coach/hint baseline for move one
+            refreshBaseline()
+        }
+    }
+
+    /**
+     * Progressive hint (Training only): each tap reveals the next rung of
+     * [HintAdvisor]'s ladder for the current position. Costs accuracy like
+     * an undo — assistance shouldn't be free, or the incentive design of
+     * Training mode collapses. No engine call: reuses the baseline analysis
+     * the coach already computed for this position.
+     */
+    fun requestHint() {
+        val state = _uiState.value
+        if (state.gameMode != GameMode.TRAINING ||
+            state.phase != GamePhase.PLAYING ||
+            !state.isPlayerTurn ||
+            state.isAiThinking ||
+            state.hintLevel >= HintAdvisor.MAX_LEVEL
+        ) {
+            return
+        }
+        val analysis = currentAnalysis ?: return
+        val nextLevel = state.hintLevel + 1
+        val hint = HintAdvisor.hint(nextLevel, analysis, state.squares, topWeakness) ?: return
+        gameHintCount++
+        _uiState.value = state.copy(
+            hintLevel = nextLevel,
+            hintText = hint.text,
+            hintHighlights = hint.highlights,
+            hintCount = gameHintCount
+        )
+    }
+
+    /**
+     * Analyze the current position in the background (Training only) so a
+     * hint is instant when asked for and the coach can measure the player's
+     * next move against an honest baseline.
+     */
+    private fun refreshBaseline() {
+        val state = _uiState.value
+        if (state.gameMode != GameMode.TRAINING || state.phase != GamePhase.PLAYING) return
+        val currentEngine = engine ?: return
+        val currentGameId = gameId
+        val positionFen = board.fen
+        viewModelScope.launch {
+            val analysis = withContext(Dispatchers.Default) {
+                engineLock.withLock {
+                    val analysisBoard = Board().apply { loadFromFen(positionFen) }
+                    currentEngine.analyze(analysisBoard, COACH_ANALYZE_MS)
+                }
+            }
+            if (gameId != currentGameId || _uiState.value.phase != GamePhase.PLAYING) return@launch
+            currentAnalysis = analysis
+            _uiState.value = _uiState.value.copy(
+                canHint = analysis != null && _uiState.value.isPlayerTurn
+            )
         }
     }
 
@@ -247,9 +350,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 isPlayerTurn = true,
                 isAiThinking = false,
                 moveCount = remaining.size
-            )
+            ),
+            // The rolled-back position needs a fresh baseline before hints
+            // or coaching resume
+            canHint = false,
+            hintLevel = 0,
+            hintText = null,
+            hintHighlights = emptySet(),
+            coachWarning = false
             // moveSeq deliberately not incremented: undo never animates
         )
+        currentAnalysis = null
+        refreshBaseline()
     }
 
     fun backToSetup() {
@@ -278,17 +390,42 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Snapshot the position so the background search never touches the
         // live board (resign/new-game can mutate it mid-search otherwise)
         val positionFen = board.fen
-        _uiState.value = _uiState.value.copy(isAiThinking = true, isPlayerTurn = false)
+        val coaching = _uiState.value.gameMode == GameMode.TRAINING
+        // Eval of the position before the player's last move, if the coach
+        // had time to compute one — the reference for blunder detection
+        val baseline = currentAnalysis
+        currentAnalysis = null
+        _uiState.value = _uiState.value.copy(
+            isAiThinking = true,
+            isPlayerTurn = false,
+            canHint = false
+        )
 
         viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
+            var playerMoveLoss = 0
             val move = withContext(Dispatchers.Default) {
                 // ChessEngine.selectMove is single-caller only (see its KDoc):
                 // never launch overlapping AI-move coroutines, or the engine's
                 // shared UCI queue would be raced. The isAiThinking gate on
-                // player input keeps this to one in-flight search at a time.
-                val searchBoard = Board().apply { loadFromFen(positionFen) }
-                currentEngine.selectMove(searchBoard)
+                // player input plus engineLock keep this to one in-flight
+                // engine call at a time.
+                engineLock.withLock {
+                    val searchBoard = Board().apply { loadFromFen(positionFen) }
+                    if (coaching && baseline != null) {
+                        // Grade the player's move live: the eval swing between
+                        // the pre-move baseline and this position, both from
+                        // the player's perspective
+                        val afterMove = currentEngine.analyze(searchBoard, COACH_ANALYZE_MS)
+                        if (afterMove != null) {
+                            playerMoveLoss = MoveClassifier.centipawnLoss(
+                                baseline.effectiveCp(),
+                                -afterMove.effectiveCp()
+                            )
+                        }
+                    }
+                    currentEngine.selectMove(searchBoard)
+                }
             }
             // Pause so instant replies still read as a "thinking" opponent,
             // as a floor on total time rather than an added delay
@@ -300,12 +437,37 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 applyMove(move)
             }
             if (!checkGameOver()) {
+                // Baseline for the player's new position: powers instant
+                // hints and the next blunder check
+                val newBaseline = if (coaching) {
+                    val fenNow = board.fen
+                    withContext(Dispatchers.Default) {
+                        engineLock.withLock {
+                            currentEngine.analyze(
+                                Board().apply { loadFromFen(fenNow) },
+                                COACH_ANALYZE_MS
+                            )
+                        }
+                    }
+                } else {
+                    null
+                }
+                if (_uiState.value.phase != GamePhase.PLAYING || gameId != currentGameId) {
+                    return@launch
+                }
+                currentAnalysis = newBaseline
                 val current = _uiState.value
                 _uiState.value = current.copy(
                     isAiThinking = false,
                     isPlayerTurn = true,
                     // Reflect a mid-game Stockfish->RaiEngine fallback in the label
                     engineLabel = currentEngine.activeEngineLabel,
+                    canHint = newBaseline != null,
+                    // Passive nudge, not an interrupt: the AI has already
+                    // replied, and the existing Training undo (which records
+                    // the practice position) is the recovery path
+                    coachWarning = coaching &&
+                        playerMoveLoss >= MoveClassifier.BLUNDER_THRESHOLD_CP,
                     canUndo = canUndo(
                         mode = current.gameMode,
                         isPlaying = true,
@@ -334,7 +496,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             moveHistorySan = sanHistory(),
             isPlayerInCheck = isPlayerInCheck(),
             moveSeq = state.moveSeq + 1,
-            canUndo = false // re-enabled when the turn returns to the player
+            canUndo = false, // re-enabled when the turn returns to the player
+            // Any move invalidates the current hint and coach warning
+            hintLevel = 0,
+            hintText = null,
+            hintHighlights = emptySet(),
+            coachWarning = false
         )
     }
 
@@ -364,9 +531,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (gameRecorded) return
         gameRecorded = true
         val state = _uiState.value
-        // Training-mode undos dock the accuracy input; Rated stays neutral
+        // Training-mode assistance docks the accuracy input; Rated stays
+        // neutral. Hints count like undos: each rung revealed is help the
+        // player asked for.
         val accuracy = if (state.gameMode == GameMode.TRAINING) {
-            UndoPenalty.accuracyAfterUndos(gameUndoCount)
+            UndoPenalty.accuracyAfterUndos(gameUndoCount + gameHintCount)
         } else {
             UndoPenalty.NEUTRAL_ACCURACY
         }
@@ -491,5 +660,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val MIN_AI_MOVE_DELAY_MS = 350L
+
+        // Coach/hint search budget per position. Two of these run per full
+        // move in Training (grade the player's move + baseline the new
+        // position); short enough to hide inside the AI-thinking pause.
+        private const val COACH_ANALYZE_MS = 200L
     }
 }

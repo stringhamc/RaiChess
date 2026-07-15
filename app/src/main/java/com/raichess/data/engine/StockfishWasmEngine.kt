@@ -117,48 +117,62 @@ class StockfishWasmEngine(
             if (!ensureReady()) return fallbackAnalysis(board, moveTimeMs)
             if (released) return null
 
-            output.clear()
-            // No ucinewgame between analyze() calls — including across
-            // different games when one engine drains a backlog: the
-            // transposition table is keyed by position, so entries from
-            // another game are irrelevant or helpful, never wrong, and a
-            // warm hash makes sequential analysis faster.
-            send("position fen ${board.fen}")
-            send("go movetime $moveTimeMs")
-
-            // Track the best info line while waiting for the bestmove
-            // terminator. Bound scores (fail-high/low) are only reported
-            // mid-resolution, so exact scores are preferred; multipv is
-            // always 1 here but filtered defensively for when hints add
-            // MultiPV search.
-            var lastInfo: UciInfoParser.UciInfo? = null
-            val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { line ->
-                UciInfoParser.parse(line)?.let { info ->
-                    if (info.multipv == 1 && !info.isBound) lastInfo = info
-                }
-                line.startsWith("bestmove")
+            // Keep the interface's "never strength-limited" promise on play
+            // instances too: lift the Skill Level handicap for this search
+            // and restore it afterwards, so in-game hints/coaching get an
+            // honest eval without permanently strengthening the opponent.
+            val liftSkillLimit = !analysisMode && config.skillLevel < MAX_SKILL_LEVEL
+            if (liftSkillLimit) send("setoption name Skill Level value $MAX_SKILL_LEVEL")
+            try {
+                analyzeAtCurrentStrength(board, moveTimeMs)
+            } finally {
+                if (liftSkillLimit) config.getUciCommands().forEach { send(it) }
             }
-            if (best == null) {
-                if (released) return null
-                Log.w(TAG, "no bestmove within analysis timeout; using fallback analyzer")
-                return fallbackAnalysis(board, moveTimeMs)
-            }
-
-            val info = lastInfo ?: return fallbackAnalysis(board, moveTimeMs)
-            // Re-validate the engine's move against the real legal set, as
-            // selectMove does; "bestmove (none)" (mate/stalemate) → null.
-            val bestMoveLan = parseUciBestMove(board, best)?.toString()?.lowercase()
-            PositionAnalysis(
-                scoreCp = info.scoreCp,
-                mateIn = info.scoreMate,
-                bestMoveLan = bestMoveLan,
-                pv = info.pv.map { it.lowercase() },
-                depth = info.depth
-            )
         } catch (e: Exception) {
             Log.w(TAG, "analyze failed; using fallback analyzer", e)
             fallbackAnalysis(board, moveTimeMs)
         }
+    }
+
+    private fun analyzeAtCurrentStrength(board: Board, moveTimeMs: Long): PositionAnalysis? {
+        output.clear()
+        // No ucinewgame between analyze() calls — including across
+        // different games when one engine drains a backlog: the
+        // transposition table is keyed by position, so entries from
+        // another game are irrelevant or helpful, never wrong, and a
+        // warm hash makes sequential analysis faster.
+        send("position fen ${board.fen}")
+        send("go movetime $moveTimeMs")
+
+        // Track the best info line while waiting for the bestmove
+        // terminator. Bound scores (fail-high/low) are only reported
+        // mid-resolution, so exact scores are preferred; multipv is
+        // always 1 here but filtered defensively for when hints add
+        // MultiPV search.
+        var lastInfo: UciInfoParser.UciInfo? = null
+        val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { line ->
+            UciInfoParser.parse(line)?.let { info ->
+                if (info.multipv == 1 && !info.isBound) lastInfo = info
+            }
+            line.startsWith("bestmove")
+        }
+        if (best == null) {
+            if (released) return null
+            Log.w(TAG, "no bestmove within analysis timeout; using fallback analyzer")
+            return fallbackAnalysis(board, moveTimeMs)
+        }
+
+        val info = lastInfo ?: return fallbackAnalysis(board, moveTimeMs)
+        // Re-validate the engine's move against the real legal set, as
+        // selectMove does; "bestmove (none)" (mate/stalemate) → null.
+        val bestMoveLan = parseUciBestMove(board, best)?.toString()?.lowercase()
+        return PositionAnalysis(
+            scoreCp = info.scoreCp,
+            mateIn = info.scoreMate,
+            bestMoveLan = bestMoveLan,
+            pv = info.pv.map { it.lowercase() },
+            depth = info.depth
+        )
     }
 
     /** Serve an analysis from the RaiEngine fallback and remember that we did. */
@@ -353,6 +367,8 @@ class StockfishWasmEngine(
         }
 
         private const val TAG = "StockfishWasmEngine"
+        /** Stockfish's Skill Level ceiling — full strength. */
+        private const val MAX_SKILL_LEVEL = 20
         private const val ASSET_HOST = "appassets.androidplatform.net"
         private const val READY_SENTINEL = "__ready__"
         private const val ERROR_SENTINEL = "__error__"
