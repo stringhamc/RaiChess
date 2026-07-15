@@ -6,7 +6,12 @@ import com.raichess.data.database.GameEntity
 import com.raichess.data.database.PositionEntity
 import com.raichess.data.database.RaiChessDatabase
 import com.raichess.domain.model.CompletedGame
+import com.raichess.domain.model.MoveClassifier
+import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.GameAnalyzer
+import com.raichess.domain.usecase.MistakeObservation
+import com.raichess.domain.usecase.WeaknessProfile
+import com.raichess.domain.usecase.WeaknessProfiler
 
 /**
  * Room-backed game history: finished games plus their per-move analysis.
@@ -47,6 +52,9 @@ class GameRepository(context: Context) {
     /** Games saved but not yet (successfully) analyzed, oldest first. */
     suspend fun pendingAnalysisGameIds(): List<Long> = dao.pendingAnalysisGameIds()
 
+    /** Re-queue games analyzed by an older pipeline version for re-analysis. */
+    suspend fun requeueOutdatedAnalyses() = dao.requeueOutdatedAnalyses(GameAnalyzer.VERSION)
+
     suspend fun recordAnalysis(gameId: Long, report: GameAnalyzer.GameReport) {
         val rows = report.moves.map { move ->
             PositionEntity(
@@ -59,11 +67,34 @@ class GameRepository(context: Context) {
                 isPlayerMove = move.isPlayerMove,
                 centipawnLoss = move.centipawnLoss,
                 classification = move.classification?.name,
+                themes = ThemeTag.toCsv(move.themes),
                 analysisDepth = move.depth,
                 analyzerVersion = GameAnalyzer.VERSION
             )
         }
         dao.recordAnalysis(gameId, rows, report.accuracy)
+    }
+
+    /**
+     * The player's current weakness profile, derived on demand from stored
+     * mistake observations (never persisted — see WeaknessProfiler). Games
+     * are ranked newest-first for the recency decay; a game with no graded
+     * mistakes doesn't advance the clock, which slightly *slows* decay for
+     * clean stretches — acceptable, since a clean stretch also adds no new
+     * observations to outweigh.
+     */
+    suspend fun weaknessProfile(maxObservations: Int = 500): WeaknessProfile {
+        val rows = dao.recentPlayerMistakes(MoveClassifier.MISTAKE_THRESHOLD_CP, maxObservations)
+        val gameRank = rows.map { it.gameId }.distinct()
+            .withIndex().associate { (rank, id) -> id to rank }
+        val observations = rows.map { row ->
+            MistakeObservation(
+                gamesAgo = gameRank.getValue(row.gameId),
+                themes = ThemeTag.fromCsv(row.themes),
+                lossCp = row.centipawnLoss
+            )
+        }
+        return WeaknessProfiler.build(observations)
     }
 
     suspend fun markAnalysisFailed(gameId: Long) {

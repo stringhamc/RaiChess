@@ -32,6 +32,12 @@ object AnalysisCoordinator {
 
     private const val TAG = "AnalysisCoordinator"
 
+    /** Max games one pending sweep re-analyzes (~15s of engine time each). */
+    private const val MAX_GAMES_PER_SWEEP = 10
+
+    private const val PREFS_NAME = "raichess_analysis"
+    private const val KEY_REQUEUED_VERSION = "requeued_for_analyzer_version"
+
     // IO, not Default: analysis time is dominated by blocking waits on the
     // engine's output queue, and Default's small pool is what the live
     // game's own move search runs on — analysis must not starve it.
@@ -74,10 +80,32 @@ object AnalysisCoordinator {
         scope.launch {
             val repository = GameRepository(appContext)
             try {
+                // Analyzer semantics changed (e.g. themes in v2)? Re-analyze
+                // old games so the weakness profile isn't sparse for history.
+                // Once the requeue has run for the current version it never
+                // needs to run again (the UPDATE flips every outdated game
+                // in one statement), so remember that in prefs — the query
+                // scans the whole positions table and shouldn't be a
+                // forever-cost on every cold start.
+                val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                if (prefs.getInt(KEY_REQUEUED_VERSION, 0) < GameAnalyzer.VERSION) {
+                    repository.requeueOutdatedAnalyses()
+                    prefs.edit().putInt(KEY_REQUEUED_VERSION, GameAnalyzer.VERSION).apply()
+                }
                 val pending = repository.pendingAnalysisGameIds()
                 if (pending.isEmpty()) return@launch
+                // Cap the per-launch batch: a long history re-queued by an
+                // analyzer bump would otherwise mean hours of background
+                // engine time in one sweep. The remainder stays PENDING
+                // (old rows keep serving queries until replaced) and the
+                // next launch continues the drain. Fresh games are analyzed
+                // by saveAndAnalyze directly, never queued behind this.
+                val batch = pending.take(MAX_GAMES_PER_SWEEP)
+                if (pending.size > batch.size) {
+                    Log.i(TAG, "analysis backlog: ${pending.size} games, processing ${batch.size} this launch")
+                }
                 withAnalysisEngine(appContext) { engine ->
-                    pending.forEach { analyzeGameWith(engine, repository, it) }
+                    batch.forEach { analyzeGameWith(engine, repository, it) }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "pending-analysis sweep failed", e)

@@ -2,6 +2,7 @@ package com.raichess.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import com.google.gson.reflect.TypeToken
@@ -11,6 +12,11 @@ import com.raichess.data.database.toEntity
 import com.raichess.domain.model.PracticeCategory
 import com.raichess.domain.model.PracticePosition
 import com.raichess.domain.model.PracticePositionStore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -31,12 +37,32 @@ class PracticeRepository(context: Context) {
     private val dao = RaiChessDatabase.get(appContext).practiceDao()
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    // Serializes read-merge-write updates from concurrent callers
-    private val writeMutex = Mutex()
 
     suspend fun getPositions(): List<PracticePosition> {
         importLegacyIfNeeded()
         return dao.getAll().map { it.toDomain() }
+    }
+
+    /**
+     * Fire-and-forget variant of [addMistakePosition] for in-game callers:
+     * runs on a repository-owned, process-lifetime scope so tearing down
+     * the calling screen right after an undo can't cancel the write and
+     * silently drop the observation (a viewModelScope launch would).
+     */
+    fun recordMistakePosition(
+        fen: String,
+        sourceMoveNumber: Int,
+        sourceGameId: Long? = null
+    ) {
+        writeScope.launch {
+            try {
+                addMistakePosition(fen, sourceMoveNumber, sourceGameId)
+            } catch (e: CancellationException) {
+                throw e // never swallow cancellation
+            } catch (e: Exception) {
+                Log.w(TAG, "failed to record mistake position", e)
+            }
+        }
     }
 
     /**
@@ -99,8 +125,18 @@ class PracticeRepository(context: Context) {
     }
 
     companion object {
+        private const val TAG = "PracticeRepository"
         private const val PREFS_NAME = "raichess_practice"
         private const val KEY_POSITIONS = "positions"
         private const val KEY_MIGRATED = "migrated_to_room"
+
+        // Process-lifetime so recordMistakePosition writes survive the
+        // teardown of whichever screen triggered them.
+        private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        // Companion-scoped (not per-instance) so read-merge-write updates
+        // stay serialized even if a second screen ever constructs its own
+        // PracticeRepository — all instances share the singleton database.
+        private val writeMutex = Mutex()
     }
 }
