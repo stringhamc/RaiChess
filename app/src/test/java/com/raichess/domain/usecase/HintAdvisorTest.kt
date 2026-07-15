@@ -97,9 +97,20 @@ class HintAdvisorTest {
     }
 
     @Test
-    fun `promotion lan parses its squares`() {
+    fun `promotion lan parses its squares and names the promoted piece`() {
         // e7e8q: from=e7 (52), to=e8 (60)
         val hint = HintAdvisor.hint(3, cp(900, "e7e8q"), squares(52 to 'P'), null)!!
         assertEquals(setOf(52, 60), hint.highlights)
+        assertEquals("Best move: e7 → e8 (promote to queen).", hint.text)
+    }
+
+    @Test
+    fun `getting mated never claims the player has a forced mate`() {
+        // mateIn < 0: the player is the one being mated — the mate cue must
+        // not fire, and with nothing else applicable the nudge stays generic
+        val losing = PositionAnalysis(scoreCp = null, mateIn = -2, bestMoveLan = "g8f8", depth = 12)
+        val hint = HintAdvisor.hint(1, losing, squares(), null)!!
+        assertTrue(hint.text.contains("stronger move"))
+        assertTrue(!hint.text.contains("forced mate"))
     }
 }

@@ -57,7 +57,10 @@ object HintAdvisor {
                 val piece = squares.getOrNull(from)?.let { pieceName(it) } ?: "piece"
                 Hint("Look at your $piece on $fromLan.", setOf(from))
             }
-            3 -> Hint("Best move: $fromLan → $toLan.", setOf(from, to))
+            3 -> {
+                val promotion = best.getOrNull(4)?.let { " (promote to ${pieceName(it)})" } ?: ""
+                Hint("Best move: $fromLan → $toLan$promotion.", setOf(from, to))
+            }
             else -> null
         }
     }
