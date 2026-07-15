@@ -60,7 +60,13 @@ interface GameDao {
      * Flip games analyzed by an older pipeline back to PENDING so the next
      * sweep re-analyzes them under the current [com.raichess.domain.usecase.GameAnalyzer.VERSION]
      * (e.g. v1 rows have no themes). recordAnalysis deletes the old rows
-     * before inserting, so re-analysis is idempotent.
+     * before inserting, so re-analysis is idempotent. The old accuracy is
+     * deliberately kept until re-analysis lands (a valid prior grade beats
+     * a blank); readers of accuracy should gate on analysisState = DONE.
+     *
+     * The subquery scans positions (no analyzerVersion index), so callers
+     * run this once per version bump, not per launch — see
+     * AnalysisCoordinator's prefs marker.
      */
     @Query(
         "UPDATE games SET analysisState = '${AnalysisState.PENDING}' " +

@@ -60,7 +60,10 @@ object ThemeTagger {
 
         val tags = mutableSetOf(phaseOf(board, ply))
 
-        // What was available and not taken (evaluated on the pre-move board)
+        // What was available and not taken (evaluated on the pre-move board).
+        // Capture detection reads the piece on the move's destination, so an
+        // en passant capture reads as capturing nothing — a known false
+        // negative, the direction this tagger prefers to err in.
         val bestLan = analysis.bestMoveLan
         val playedBest = bestLan != null && bestLan == moveLan.lowercase()
         if (!playedBest && bestLan != null) {
