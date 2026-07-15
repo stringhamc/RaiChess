@@ -78,6 +78,12 @@ object ThemeTagger {
 
         if ((nextAnalysis?.mateIn ?: 0) > 0) tags.add(ThemeTag.ALLOWED_MATE)
 
+        // Single-ply exchange approximation, not a full SEE: hanging means
+        // attacked while undefended, or attacked by something cheaper (a
+        // defended knight attacked by a pawn is still lost material). Pinned
+        // "defenders" are counted as defending even though they couldn't
+        // legally recapture — a false *negative*, which is the direction
+        // this tagger prefers to err in.
         val movedPieceValue = pieceValue(board.getPiece(played.to), playerSide)
         val attackers = board.squareAttackedBy(played.to, opponentSide)
         val hanging = movedPieceValue > 0 && attackers != 0L && (

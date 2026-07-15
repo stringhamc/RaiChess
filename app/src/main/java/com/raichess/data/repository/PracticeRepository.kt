@@ -2,6 +2,7 @@ package com.raichess.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import com.google.gson.reflect.TypeToken
@@ -9,7 +10,6 @@ import com.raichess.data.database.RaiChessDatabase
 import com.raichess.data.database.toDomain
 import com.raichess.data.database.toEntity
 import com.raichess.domain.model.PracticeCategory
-import android.util.Log
 import com.raichess.domain.model.PracticePosition
 import com.raichess.domain.model.PracticePositionStore
 import kotlinx.coroutines.CoroutineScope
@@ -58,6 +58,8 @@ class PracticeRepository(context: Context) {
         writeScope.launch {
             try {
                 addMistakePosition(fen, sourceMoveNumber, sourceGameId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // never swallow cancellation
             } catch (e: Exception) {
                 Log.w(TAG, "failed to record mistake position", e)
             }
