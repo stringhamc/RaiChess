@@ -416,16 +416,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // engine call at a time.
                 engineLock.withLock {
                     val searchBoard = Board().apply { loadFromFen(positionFen) }
+                    // baseline is null when the player outraced the ~200ms
+                    // background analysis (move 1, or right after an undo):
+                    // that move silently skips grading — an accepted gap,
+                    // preferable to blocking input on the coach
                     if (coaching && baseline != null) {
-                        // Grade the player's move live: the eval swing between
-                        // the pre-move baseline and this position, both from
-                        // the player's perspective
                         val afterMove = currentEngine.analyze(searchBoard, COACH_ANALYZE_MS)
                         if (afterMove != null) {
-                            playerMoveLoss = MoveClassifier.centipawnLoss(
-                                baseline.effectiveCp(),
-                                -afterMove.effectiveCp()
-                            )
+                            playerMoveLoss = MoveClassifier.lossBetween(baseline, afterMove)
                         }
                     }
                     currentEngine.selectMove(searchBoard)
