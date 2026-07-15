@@ -114,8 +114,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // single-caller, and coaching adds analyze() calls that could otherwise
     // overlap a search (e.g. an undo's baseline refresh racing the next AI move)
     private val engineLock = Mutex()
+
+    /**
+     * A coach analysis tagged with the position it was computed for, so a
+     * slow background analysis resolving after a fast player move can never
+     * be applied to the wrong position — every consumer validates the FEN.
+     */
+    private data class CachedAnalysis(val fen: String, val analysis: PositionAnalysis)
+
     /** Analysis of the position the player is currently looking at (Training). */
-    private var currentAnalysis: PositionAnalysis? = null
+    private var currentAnalysis: CachedAnalysis? = null
     /** The player's worst substantive weakness, for personalized rung-1 hints. */
     private var topWeakness: ThemeTag? = null
 
@@ -231,15 +239,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         if (state.gameMode != GameMode.TRAINING ||
             state.phase != GamePhase.PLAYING ||
+            !state.canHint ||
             !state.isPlayerTurn ||
             state.isAiThinking ||
             state.hintLevel >= HintAdvisor.MAX_LEVEL
         ) {
             return
         }
-        val analysis = currentAnalysis ?: return
+        // Defense in depth beyond canHint: never hint from an analysis of a
+        // different position than the one on screen
+        val cached = currentAnalysis?.takeIf { it.fen == board.fen } ?: return
         val nextLevel = state.hintLevel + 1
-        val hint = HintAdvisor.hint(nextLevel, analysis, state.squares, topWeakness) ?: return
+        val hint = HintAdvisor.hint(nextLevel, cached.analysis, state.squares, topWeakness) ?: return
         gameHintCount++
         _uiState.value = state.copy(
             hintLevel = nextLevel,
@@ -268,10 +279,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             if (gameId != currentGameId || _uiState.value.phase != GamePhase.PLAYING) return@launch
-            currentAnalysis = analysis
-            _uiState.value = _uiState.value.copy(
-                canHint = analysis != null && _uiState.value.isPlayerTurn
-            )
+            // Discard if the board moved on while we analyzed — the newer
+            // refreshBaseline for the newer position will supply the cache
+            if (analysis == null || board.fen != positionFen) return@launch
+            currentAnalysis = CachedAnalysis(positionFen, analysis)
+            _uiState.value = _uiState.value.copy(canHint = _uiState.value.isPlayerTurn)
         }
     }
 
@@ -382,13 +394,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun playPlayerMove(fromIndex: Int, toIndex: Int) {
         val move = findLegalMove(fromIndex, toIndex) ?: return
+        val fenBeforeMove = board.fen
         applyMove(move)
         if (!checkGameOver()) {
-            makeAiMove()
+            makeAiMove(playerMoveBaselineFen = fenBeforeMove)
         }
     }
 
-    private fun makeAiMove() {
+    /**
+     * @param playerMoveBaselineFen the position the player just moved from,
+     *   for blunder grading — null when there is no player move to grade
+     *   (the AI's opening move as White)
+     */
+    private fun makeAiMove(playerMoveBaselineFen: String? = null) {
         val currentEngine = engine ?: return
         val currentGameId = gameId
         // Snapshot the position so the background search never touches the
@@ -396,8 +414,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val positionFen = board.fen
         val coaching = _uiState.value.gameMode == GameMode.TRAINING
         // Eval of the position before the player's last move, if the coach
-        // had time to compute one — the reference for blunder detection
-        val baseline = currentAnalysis
+        // had time to compute one for exactly that position — the FEN check
+        // means a stale analysis of some earlier position can never grade
+        // this move
+        val baseline = playerMoveBaselineFen?.let { fen ->
+            currentAnalysis?.takeIf { it.fen == fen }?.analysis
+        }
         currentAnalysis = null
         _uiState.value = _uiState.value.copy(
             isAiThinking = true,
