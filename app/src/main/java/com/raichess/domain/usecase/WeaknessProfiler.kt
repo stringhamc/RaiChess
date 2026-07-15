@@ -25,6 +25,26 @@ data class ThemeStat(
 )
 
 /**
+ * The player's current profile, ranked worst-first within each list.
+ *
+ * [weaknesses] and [phases] are ranked separately because they aren't
+ * comparable: a phase tag attaches to every graded mistake, while the
+ * substantive detectors are deliberately conservative — mixed together,
+ * "middlegame" would top the list by construction and crowd out the
+ * actionable weakness a hint should target.
+ */
+data class WeaknessProfile(
+    /** Substantive mistake types (hanging pieces, missed mates, ...). */
+    val weaknesses: List<ThemeStat>,
+    /** Where in the game the mistakes happen. */
+    val phases: List<ThemeStat>
+) {
+    companion object {
+        val EMPTY = WeaknessProfile(emptyList(), emptyList())
+    }
+}
+
+/**
  * Derives the player's weakness profile from stored mistake observations
  * (Phase B of the coaching roadmap). The core design rule: observations are
  * immutable, the profile is recomputed — so a player who stops hanging
@@ -39,8 +59,8 @@ object WeaknessProfiler {
     /** Games for an observation's weight to halve. */
     const val HALF_LIFE_GAMES = 20.0
 
-    /** Themes ranked worst-first; themes never observed are absent. */
-    fun build(observations: List<MistakeObservation>): List<ThemeStat> {
+    /** Themes never observed are absent from both lists. */
+    fun build(observations: List<MistakeObservation>): WeaknessProfile {
         data class Acc(var score: Double = 0.0, var count: Int = 0, var lossSum: Long = 0)
 
         val byTheme = HashMap<ThemeTag, Acc>()
@@ -53,7 +73,7 @@ object WeaknessProfiler {
                 acc.lossSum += obs.lossCp
             }
         }
-        return byTheme.entries
+        val ranked = byTheme.entries
             .map { (theme, acc) ->
                 ThemeStat(
                     theme = theme,
@@ -63,5 +83,7 @@ object WeaknessProfiler {
                 )
             }
             .sortedWith(compareByDescending<ThemeStat> { it.score }.thenBy { it.theme.ordinal })
+        val (phases, weaknesses) = ranked.partition { it.theme.isPhase }
+        return WeaknessProfile(weaknesses = weaknesses, phases = phases)
     }
 }

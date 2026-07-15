@@ -74,6 +74,10 @@ object AnalysisCoordinator {
         scope.launch {
             val repository = GameRepository(appContext)
             try {
+                // Analyzer semantics changed (e.g. themes in v2)? Re-analyze
+                // old games so the weakness profile isn't sparse for history.
+                // Bounded (game count), serialized, and once per process.
+                repository.requeueOutdatedAnalyses()
                 val pending = repository.pendingAnalysisGameIds()
                 if (pending.isEmpty()) return@launch
                 withAnalysisEngine(appContext) { engine ->

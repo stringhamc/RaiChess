@@ -10,7 +10,7 @@ import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.GameAnalyzer
 import com.raichess.domain.usecase.MistakeObservation
-import com.raichess.domain.usecase.ThemeStat
+import com.raichess.domain.usecase.WeaknessProfile
 import com.raichess.domain.usecase.WeaknessProfiler
 
 /**
@@ -52,6 +52,9 @@ class GameRepository(context: Context) {
     /** Games saved but not yet (successfully) analyzed, oldest first. */
     suspend fun pendingAnalysisGameIds(): List<Long> = dao.pendingAnalysisGameIds()
 
+    /** Re-queue games analyzed by an older pipeline version for re-analysis. */
+    suspend fun requeueOutdatedAnalyses() = dao.requeueOutdatedAnalyses(GameAnalyzer.VERSION)
+
     suspend fun recordAnalysis(gameId: Long, report: GameAnalyzer.GameReport) {
         val rows = report.moves.map { move ->
             PositionEntity(
@@ -80,7 +83,7 @@ class GameRepository(context: Context) {
      * clean stretches — acceptable, since a clean stretch also adds no new
      * observations to outweigh.
      */
-    suspend fun weaknessProfile(maxObservations: Int = 500): List<ThemeStat> {
+    suspend fun weaknessProfile(maxObservations: Int = 500): WeaknessProfile {
         val rows = dao.recentPlayerMistakes(MoveClassifier.MISTAKE_THRESHOLD_CP, maxObservations)
         val gameRank = rows.map { it.gameId }.distinct()
             .withIndex().associate { (rank, id) -> id to rank }

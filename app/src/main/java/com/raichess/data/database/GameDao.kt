@@ -56,6 +56,19 @@ interface GameDao {
     )
     suspend fun recentPlayerMistakes(minLossCp: Int, limit: Int): List<MistakeRow>
 
+    /**
+     * Flip games analyzed by an older pipeline back to PENDING so the next
+     * sweep re-analyzes them under the current [com.raichess.domain.usecase.GameAnalyzer.VERSION]
+     * (e.g. v1 rows have no themes). recordAnalysis deletes the old rows
+     * before inserting, so re-analysis is idempotent.
+     */
+    @Query(
+        "UPDATE games SET analysisState = '${AnalysisState.PENDING}' " +
+            "WHERE analysisState = '${AnalysisState.DONE}' AND id IN " +
+            "(SELECT DISTINCT gameId FROM positions WHERE analyzerVersion < :version)"
+    )
+    suspend fun requeueOutdatedAnalyses(version: Int)
+
     /** Clear any half-written rows from a previous attempt, then store the new ones. */
     @Query("DELETE FROM positions WHERE gameId = :gameId")
     suspend fun deletePositionsForGame(gameId: Long)

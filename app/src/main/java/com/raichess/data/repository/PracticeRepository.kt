@@ -12,6 +12,7 @@ import com.raichess.data.database.toEntity
 import com.raichess.domain.model.PracticeCategory
 import com.raichess.domain.model.PracticePosition
 import com.raichess.domain.model.PracticePositionStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,7 +59,7 @@ class PracticeRepository(context: Context) {
         writeScope.launch {
             try {
                 addMistakePosition(fen, sourceMoveNumber, sourceGameId)
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e // never swallow cancellation
             } catch (e: Exception) {
                 Log.w(TAG, "failed to record mistake position", e)

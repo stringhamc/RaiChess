@@ -7,7 +7,7 @@ package com.raichess.domain.model
  * with recency decay, so interpretation can always be recomputed as the
  * taxonomy grows — add new tags, re-analyze, never migrate.
  */
-enum class ThemeTag(val id: String) {
+enum class ThemeTag(val id: String, val isPhase: Boolean = false) {
     /** The moved piece landed where it can be won (attacked and under-defended). */
     HANGING_PIECE("hanging_piece"),
     /** The move let the opponent's best reply win significant material elsewhere. */
@@ -18,10 +18,15 @@ enum class ThemeTag(val id: String) {
     MISSED_MATE("missed_mate"),
     /** The engine's best move won significant material and wasn't played. */
     MISSED_CAPTURE("missed_capture"),
-    /** Game phase at the moment of the mistake. */
-    OPENING("opening"),
-    MIDDLEGAME("middlegame"),
-    ENDGAME("endgame");
+    /**
+     * Game phase at the moment of the mistake. Phase tags attach to *every*
+     * graded mistake (exactly one per observation), unlike the substantive
+     * tags above, which only fire when a detector recognizes the pattern —
+     * so the profile ranks the two kinds separately (see WeaknessProfiler).
+     */
+    OPENING("opening", isPhase = true),
+    MIDDLEGAME("middlegame", isPhase = true),
+    ENDGAME("endgame", isPhase = true);
 
     companion object {
         private val byId = entries.associateBy { it.id }
