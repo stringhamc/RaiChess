@@ -45,6 +45,18 @@ class MoveClassifierTest {
     }
 
     @Test
+    fun `lossBetween flips the opponent-perspective eval back to the mover`() {
+        fun cp(score: Int) = PositionAnalysis(scoreCp = score, mateIn = null, bestMoveLan = null)
+        // +20 for the mover before; opponent sees -30 after → mover +30: no loss
+        assertEquals(0, MoveClassifier.lossBetween(cp(20), cp(-30)))
+        // -80 before; opponent then mates → mover at -1000 capped: 920 lost
+        val mated = PositionAnalysis(scoreCp = null, mateIn = 1, bestMoveLan = null)
+        assertEquals(920, MoveClassifier.lossBetween(cp(-80), mated))
+        // +200 before; opponent sees +200 after → mover -200: 400 lost
+        assertEquals(400, MoveClassifier.lossBetween(cp(200), cp(200)))
+    }
+
+    @Test
     fun `effectiveCp caps runaway and mate scores`() {
         assertEquals(40, PositionAnalysis(scoreCp = 40, mateIn = null, bestMoveLan = "e2e4").effectiveCp())
         assertEquals(1000, PositionAnalysis(scoreCp = 5200, mateIn = null, bestMoveLan = "e2e4").effectiveCp())

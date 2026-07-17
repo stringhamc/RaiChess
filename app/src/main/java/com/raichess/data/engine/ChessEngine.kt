@@ -34,7 +34,12 @@ interface ChessEngine {
      * Unlike [selectMove] this is never strength-limited — it powers
      * post-game analysis and coaching, where an honest eval is the point.
      * Same threading contract as [selectMove]: single sequential caller, off
-     * the UI thread, and [board] is left in its original state.
+     * the UI thread, and [board] is left in its original state. The
+     * single-caller rule covers analyze() and selectMove() TOGETHER on one
+     * instance: implementations may temporarily mutate shared engine state
+     * during analysis (e.g. StockfishWasmEngine lifts its Skill Level cap),
+     * so an unserialized selectMove could silently play at the wrong
+     * strength.
      *
      * @param moveTimeMs search budget; fixed-depth implementations may ignore it
      */

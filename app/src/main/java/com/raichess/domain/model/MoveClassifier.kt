@@ -34,7 +34,9 @@ object MoveClassifier {
 
     /** Public: ThemeTagger and the weakness profile gate on mistake-or-worse. */
     const val MISTAKE_THRESHOLD_CP = 100
-    private const val BLUNDER_THRESHOLD_CP = 300
+
+    /** Public: the live coach warns at blunder-level loss. */
+    const val BLUNDER_THRESHOLD_CP = 300
 
     /**
      * Centipawns thrown away by a move, never negative. Both arguments are
@@ -44,6 +46,17 @@ object MoveClassifier {
      */
     fun centipawnLoss(evalBeforeCp: Int, evalAfterCp: Int): Int =
         max(0, evalBeforeCp - evalAfterCp)
+
+    /**
+     * Centipawns lost by the move that turned [before] into [after], both
+     * engine verdicts from their own side-to-move's perspective — so
+     * [before] is from the mover's view and [after] from the opponent's,
+     * and the sign flip back to the mover happens here, in exactly one
+     * tested place. Used by the live coach; GameAnalyzer does the same
+     * flip against terminal-position evals that have no analysis object.
+     */
+    fun lossBetween(before: PositionAnalysis, after: PositionAnalysis): Int =
+        centipawnLoss(before.effectiveCp(), -after.effectiveCp())
 
     fun classify(centipawnLoss: Int, playedEngineBest: Boolean): MoveClassification = when {
         playedEngineBest -> MoveClassification.BEST

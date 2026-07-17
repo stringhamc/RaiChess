@@ -1,7 +1,8 @@
 package com.raichess.domain.model
 
 /**
- * Maps Training-mode undo usage to the moveAccuracy input of
+ * Maps Training-mode assistance (undos plus revealed hint rungs — callers
+ * pass the combined count) to the moveAccuracy input of
  * [EloCalculator.calculateNewElo].
  *
  * Accuracy 50 is neutral. The calculator applies
