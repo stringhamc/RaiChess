@@ -107,6 +107,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var board = Board()
     private var moveList = MoveList()
     private var engine: ChessEngine? = null
+
+    /**
+     * The engine hints/coaching analyze with. In the Stockfish opponent
+     * band this is the same instance as [engine] (its analyze() lifts the
+     * skill cap). In the RaiEngine band a dedicated full-strength Stockfish
+     * analyzer is created instead, so hints are always Stockfish-quality
+     * when the WASM bridge works — still one WebView per game, since
+     * RaiEngine opponents don't have one. Rated mode never analyzes, so it
+     * shares [engine] (unused).
+     */
+    private var analysisEngine: ChessEngine? = null
     private var gameRecorded = false
     private var gameId = 0
     private var gameUndoCount = 0
@@ -172,11 +183,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // never touch the live board even if it is still running
         board = Board()
         moveList = MoveList()
-        // Release the previous game's engine (may hold a WebView) and pick the
-        // engine for this opponent strength (RaiEngine weak band / Stockfish above)
+        // Release the previous game's engines (may hold a WebView) and pick
+        // the engine for this opponent strength (RaiEngine weak band /
+        // Stockfish above)
+        if (analysisEngine !== engine) analysisEngine?.close()
         engine?.close()
         val newEngine = EngineFactory.create(getApplication<Application>(), state.opponentElo)
         engine = newEngine
+        analysisEngine = if (
+            state.gameMode == GameMode.TRAINING &&
+            !EngineFactory.usesStockfish(state.opponentElo)
+        ) {
+            EngineFactory.createAnalyzer(getApplication<Application>())
+        } else {
+            newEngine
+        }
         gameRecorded = false
         gameId++
         gameUndoCount = 0
@@ -241,6 +262,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // different position than the one on screen
         val cached = currentAnalysis?.takeIf { it.fen == board.fen } ?: return
         val nextLevel = state.hintLevel + 1
+        if (nextLevel == HintAdvisor.DEEP_LEVEL) {
+            requestDeepHint(state, cached)
+            return
+        }
         val hint = HintAdvisor.hint(nextLevel, cached.analysis, cached.fen) ?: return
         gameHintCount++
         _uiState.value = state.copy(
@@ -252,6 +277,47 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Rung 3: a fresh, much deeper search (not the cached ~200ms baseline),
+     * shown when it lands. The deeper analysis also replaces the baseline,
+     * so the move played afterwards is graded against the better eval.
+     */
+    private fun requestDeepHint(state: GameUiState, cached: CachedAnalysis) {
+        val coach = analysisEngine ?: return
+        val currentGameId = gameId
+        val positionFen = cached.fen
+        gameHintCount++
+        _uiState.value = state.copy(
+            hintLevel = HintAdvisor.DEEP_LEVEL,
+            hintText = "Thinking deeper…",
+            hintCount = gameHintCount
+        )
+        viewModelScope.launch {
+            val deep = withContext(Dispatchers.Default) {
+                engineLock.withLock {
+                    coach.analyze(Board().apply { loadFromFen(positionFen) }, DEEP_HINT_ANALYZE_MS)
+                }
+            }
+            if (gameId != currentGameId ||
+                _uiState.value.phase != GamePhase.PLAYING ||
+                board.fen != positionFen
+            ) {
+                return@launch
+            }
+            if (deep == null) {
+                _uiState.value = _uiState.value.copy(hintText = "No deeper line found.")
+                return@launch
+            }
+            currentAnalysis = CachedAnalysis(positionFen, deep)
+            val hint = HintAdvisor.hint(HintAdvisor.DEEP_LEVEL, deep, positionFen) ?: return@launch
+            _uiState.value = _uiState.value.copy(
+                hintText = hint.text,
+                hintHighlights = hint.highlights,
+                winPercent = WinProbability.percent(deep.effectiveCp())
+            )
+        }
+    }
+
+    /**
      * Analyze the current position in the background (Training only) so a
      * hint is instant when asked for and the coach can measure the player's
      * next move against an honest baseline.
@@ -259,14 +325,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun refreshBaseline() {
         val state = _uiState.value
         if (state.gameMode != GameMode.TRAINING || state.phase != GamePhase.PLAYING) return
-        val currentEngine = engine ?: return
+        val coach = analysisEngine ?: return
         val currentGameId = gameId
         val positionFen = board.fen
         viewModelScope.launch {
             val analysis = withContext(Dispatchers.Default) {
                 engineLock.withLock {
                     val analysisBoard = Board().apply { loadFromFen(positionFen) }
-                    currentEngine.analyze(analysisBoard, COACH_ANALYZE_MS)
+                    coach.analyze(analysisBoard, COACH_ANALYZE_MS)
                 }
             }
             if (gameId != currentGameId || _uiState.value.phase != GamePhase.PLAYING) return@launch
@@ -386,6 +452,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        if (analysisEngine !== engine) analysisEngine?.close()
         engine?.close()
         super.onCleared()
     }
@@ -414,6 +481,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         playerMoveLan: String? = null
     ) {
         val currentEngine = engine ?: return
+        val coach = analysisEngine
         val currentGameId = gameId
         // Snapshot the position so the background search never touches the
         // live board (resign/new-game can mutate it mid-search otherwise)
@@ -449,8 +517,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     // background analysis (move 1, or right after an undo):
                     // that move silently skips grading — an accepted gap,
                     // preferable to blocking input on the coach
-                    if (coaching && baseline != null) {
-                        val afterMove = currentEngine.analyze(searchBoard, COACH_ANALYZE_MS)
+                    if (coaching && baseline != null && coach != null) {
+                        val afterMove = coach.analyze(searchBoard, COACH_ANALYZE_MS)
                         if (afterMove != null) {
                             playerMoveLoss = MoveClassifier.lossBetween(baseline, afterMove)
                             playerMoveRating = MoveClassifier.classify(
@@ -690,5 +758,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // pause, and the new-position baseline runs after turn handoff —
         // neither delays the player's control of the board.
         private const val COACH_ANALYZE_MS = 200L
+
+        // The third hint tap's search budget: long enough for a genuinely
+        // deeper verdict, short enough to feel like a considered answer
+        // rather than a stall.
+        private const val DEEP_HINT_ANALYZE_MS = 1500L
     }
 }

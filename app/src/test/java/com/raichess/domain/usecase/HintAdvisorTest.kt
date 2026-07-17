@@ -57,10 +57,17 @@ class HintAdvisorTest {
     }
 
     @Test
+    fun `level three phrases the deeper verdict`() {
+        val hint = HintAdvisor.hint(HintAdvisor.DEEP_LEVEL, cp(45, "e2e4"), startFen)!!
+        assertEquals("After a deeper look: play e2 → e4.", hint.text)
+        assertEquals(setOf(12, 28), hint.highlights)
+    }
+
+    @Test
     fun `no hint without a best move or for out-of-range levels`() {
         assertNull(HintAdvisor.hint(1, cp(0, null), startFen))
         assertNull(HintAdvisor.hint(0, cp(0, "e2e4"), startFen))
-        assertNull(HintAdvisor.hint(3, cp(0, "e2e4"), startFen))
+        assertNull(HintAdvisor.hint(HintAdvisor.MAX_LEVEL + 1, cp(0, "e2e4"), startFen))
         assertNull(HintAdvisor.hint(1, cp(0, "xx"), startFen))
     }
 }

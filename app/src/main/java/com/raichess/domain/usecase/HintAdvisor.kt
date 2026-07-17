@@ -3,17 +3,22 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.PositionAnalysis
 
 /**
- * Content for the two-rung hint ladder: rung 1 points at the piece to
- * look at (name + square highlight), rung 2 shows the exact move. A text
- * nudge rung was tried and dropped — it read as encouragement rather than
- * help; pointing at the board is the hint.
+ * Content for the hint ladder: rung 1 points at the piece to look at
+ * (name + square highlight), rung 2 shows the exact move, rung 3 shows
+ * the move a deeper engine search settles on (the caller runs the longer
+ * search and passes its result here). A text nudge rung was tried and
+ * dropped — it read as encouragement rather than help; pointing at the
+ * board is the hint.
  *
  * Pure content selection over an already-computed [PositionAnalysis] —
  * no engine calls, no Android/chesslib types, fully unit-testable.
  */
 object HintAdvisor {
 
-    const val MAX_LEVEL = 2
+    const val MAX_LEVEL = 3
+
+    /** The rung whose content requires a fresh, deeper engine search. */
+    const val DEEP_LEVEL = 3
 
     data class Hint(
         val text: String,
@@ -45,6 +50,11 @@ object HintAdvisor {
                 val promotion = bestLan.getOrNull(4)
                     ?.let { " (promote to ${pieceName(it)})" } ?: ""
                 Hint("Play $fromLan → $toLan$promotion.", setOf(from, to))
+            }
+            DEEP_LEVEL -> {
+                val promotion = bestLan.getOrNull(4)
+                    ?.let { " (promote to ${pieceName(it)})" } ?: ""
+                Hint("After a deeper look: play $fromLan → $toLan$promotion.", setOf(from, to))
             }
             else -> null
         }
