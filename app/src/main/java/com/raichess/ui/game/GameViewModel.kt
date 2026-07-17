@@ -294,7 +294,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = state.copy(
             hintLevel = HintAdvisor.DEEP_LEVEL,
             hintText = "Thinking deeper…",
-            isDeepHintRunning = true
+            isDeepHintRunning = true,
+            // Undo rides out the search too — greyed, not silently dead
+            canUndo = false
         )
         viewModelScope.launch {
             try {
@@ -330,7 +332,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     winPercent = WinProbability.percent(deep.effectiveCp())
                 )
             } finally {
-                _uiState.value = _uiState.value.copy(isDeepHintRunning = false)
+                val current = _uiState.value
+                _uiState.value = current.copy(
+                    isDeepHintRunning = false,
+                    canUndo = canUndo(
+                        mode = current.gameMode,
+                        isPlaying = current.phase == GamePhase.PLAYING,
+                        isPlayerTurn = current.isPlayerTurn,
+                        isAiThinking = current.isAiThinking,
+                        moveCount = moveList.size
+                    )
+                )
             }
         }
     }
@@ -404,6 +416,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun undoMove() {
         val state = _uiState.value
+        // Ride out an in-flight deep hint (≤1.5s): undoing under it would
+        // leave input blocked on a stale search holding the engine lock
+        if (state.isDeepHintRunning) return
         if (!canUndo(
                 mode = state.gameMode,
                 isPlaying = state.phase == GamePhase.PLAYING,
