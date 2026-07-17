@@ -46,19 +46,20 @@ object HintAdvisor {
                     ?.let { pieceName(it) } ?: "piece"
                 Hint("Look at your $piece on $fromLan.", setOf(from))
             }
-            2 -> {
-                val promotion = bestLan.getOrNull(4)
-                    ?.let { " (promote to ${pieceName(it)})" } ?: ""
-                Hint("Play $fromLan → $toLan$promotion.", setOf(from, to))
-            }
-            DEEP_LEVEL -> {
-                val promotion = bestLan.getOrNull(4)
-                    ?.let { " (promote to ${pieceName(it)})" } ?: ""
-                Hint("After a deeper look: play $fromLan → $toLan$promotion.", setOf(from, to))
-            }
+            2 -> Hint(
+                "Play $fromLan → $toLan${promotionSuffix(bestLan)}.",
+                setOf(from, to)
+            )
+            DEEP_LEVEL -> Hint(
+                "After a deeper look: play $fromLan → $toLan${promotionSuffix(bestLan)}.",
+                setOf(from, to)
+            )
             else -> null
         }
     }
+
+    private fun promotionSuffix(bestLan: String): String =
+        bestLan.getOrNull(4)?.let { " (promote to ${pieceName(it)})" } ?: ""
 
     /** "e2" → 12 (a1=0..h8=63), or null if malformed. */
     fun squareOrdinal(lanSquare: String): Int? {

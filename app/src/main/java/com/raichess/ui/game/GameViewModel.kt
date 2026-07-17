@@ -87,6 +87,8 @@ data class GameUiState(
     val hintCount: Int = 0,
     /** True when the player's last move lost blunder-level ground (Training). */
     val coachWarning: Boolean = false,
+    /** True while a rung-3 deep-hint search is in flight (blocks board input). */
+    val isDeepHintRunning: Boolean = false,
     /** Live grade of the player's last move (Training; null until graded). */
     val lastMoveRating: MoveClassification? = null,
     /** Player's live winning chances 0–100 (Training; null until analyzed). */
@@ -228,6 +230,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             hintHighlights = emptySet(),
             hintCount = 0,
             coachWarning = false,
+            isDeepHintRunning = false,
             lastMoveRating = null,
             winPercent = null
         )
@@ -285,35 +288,50 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val coach = analysisEngine ?: return
         val currentGameId = gameId
         val positionFen = cached.fen
-        gameHintCount++
+        // Level advances now (disables the button while searching), but the
+        // hint is only charged when it actually delivers content — matching
+        // rungs 1–2's no-charge-without-content behavior
         _uiState.value = state.copy(
             hintLevel = HintAdvisor.DEEP_LEVEL,
             hintText = "Thinking deeper…",
-            hintCount = gameHintCount
+            isDeepHintRunning = true
         )
         viewModelScope.launch {
-            val deep = withContext(Dispatchers.Default) {
-                engineLock.withLock {
-                    coach.analyze(Board().apply { loadFromFen(positionFen) }, DEEP_HINT_ANALYZE_MS)
+            try {
+                val deep = withContext(Dispatchers.Default) {
+                    engineLock.withLock {
+                        coach.analyze(
+                            Board().apply { loadFromFen(positionFen) },
+                            DEEP_HINT_ANALYZE_MS
+                        )
+                    }
                 }
+                if (gameId != currentGameId ||
+                    _uiState.value.phase != GamePhase.PLAYING ||
+                    board.fen != positionFen
+                ) {
+                    return@launch
+                }
+                val hint = deep?.let { HintAdvisor.hint(HintAdvisor.DEEP_LEVEL, it, positionFen) }
+                if (deep == null || hint == null) {
+                    // Refund: step back to rung 2 so the tap can be retried
+                    _uiState.value = _uiState.value.copy(
+                        hintLevel = HintAdvisor.DEEP_LEVEL - 1,
+                        hintText = "No deeper line found — try again."
+                    )
+                    return@launch
+                }
+                currentAnalysis = CachedAnalysis(positionFen, deep)
+                gameHintCount++
+                _uiState.value = _uiState.value.copy(
+                    hintText = hint.text,
+                    hintHighlights = hint.highlights,
+                    hintCount = gameHintCount,
+                    winPercent = WinProbability.percent(deep.effectiveCp())
+                )
+            } finally {
+                _uiState.value = _uiState.value.copy(isDeepHintRunning = false)
             }
-            if (gameId != currentGameId ||
-                _uiState.value.phase != GamePhase.PLAYING ||
-                board.fen != positionFen
-            ) {
-                return@launch
-            }
-            if (deep == null) {
-                _uiState.value = _uiState.value.copy(hintText = "No deeper line found.")
-                return@launch
-            }
-            currentAnalysis = CachedAnalysis(positionFen, deep)
-            val hint = HintAdvisor.hint(HintAdvisor.DEEP_LEVEL, deep, positionFen) ?: return@launch
-            _uiState.value = _uiState.value.copy(
-                hintText = hint.text,
-                hintHighlights = hint.highlights,
-                winPercent = WinProbability.percent(deep.effectiveCp())
-            )
         }
     }
 
@@ -352,6 +370,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun onSquareTapped(index: Int) {
         val state = _uiState.value
         if (state.phase != GamePhase.PLAYING || !state.isPlayerTurn || state.isAiThinking) return
+        // Moving mid-deep-hint would waste the requested search and queue
+        // the AI's reply behind it on the engine lock — hold input briefly
+        if (state.isDeepHintRunning) return
 
         val selected = state.selectedSquare
         if (selected != null && index in state.legalTargets) {
