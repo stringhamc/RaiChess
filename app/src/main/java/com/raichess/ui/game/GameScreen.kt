@@ -471,7 +471,9 @@ private fun MoveHistory(moves: List<String>, modifier: Modifier = Modifier) {
     )
 }
 
-private val coachLineHeight = 34.dp
+// Fits maxLines = 2 of bodyMedium (20sp line height ≈ 40dp) with headroom —
+// a fixed slot shorter than its own text would overflow into the row below
+private val coachLineHeight = 42.dp
 
 /**
  * The live coach readout: last move's grade (with an undo nudge on a
