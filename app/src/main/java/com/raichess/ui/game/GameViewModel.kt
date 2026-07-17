@@ -600,9 +600,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     canHint = false,
                     // Passive nudge, not an interrupt: the AI has already
                     // replied, and the existing Training undo (which records
-                    // the practice position) is the recovery path
-                    coachWarning = coaching &&
-                        playerMoveLoss >= MoveClassifier.BLUNDER_THRESHOLD_CP,
+                    // the practice position) is the recovery path. Derived
+                    // from the rating, NOT the raw eval swing: two short
+                    // searches can disagree by blunder-level noise even when
+                    // the player played the engine's own best move, and
+                    // "Best move — consider Undo" is nonsense. classify()
+                    // already resolves that (playedBest can never be BLUNDER),
+                    // so the rating is the single source of truth.
+                    coachWarning = playerMoveRating == MoveClassification.BLUNDER,
                     lastMoveRating = playerMoveRating,
                     canUndo = canUndo(
                         mode = current.gameMode,
