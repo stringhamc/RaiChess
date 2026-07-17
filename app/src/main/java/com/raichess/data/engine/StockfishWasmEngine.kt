@@ -179,9 +179,14 @@ class StockfishWasmEngine(
         )
     }
 
-    /** Serve an analysis from the RaiEngine fallback and remember that we did. */
+    /**
+     * Serve an analysis from the RaiEngine fallback. Deliberately does NOT
+     * set [everFellBack]: that flag drives the UI's opponent-engine label,
+     * which must reflect who is serving *moves* — a single slow coaching
+     * analysis on a play instance must not brand the whole game
+     * "RaiEngine (fallback)" while Stockfish keeps playing.
+     */
     private fun fallbackAnalysis(board: Board, moveTimeMs: Long): PositionAnalysis? {
-        everFellBack = true
         return fallback.analyze(board, moveTimeMs)
     }
 

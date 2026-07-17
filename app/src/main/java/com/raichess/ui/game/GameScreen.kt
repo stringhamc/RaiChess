@@ -96,10 +96,11 @@ fun GameScreen(
             modifier = Modifier.padding(vertical = 6.dp)
         )
 
-        // Coach line (Training): a requested hint, else the live move
+        // Coach line (Training only — Rated shouldn't pay a blank gap for a
+        // feature it never shows): a requested hint, else the live move
         // rating and win chances. Fixed-height slot so the board never
         // reflows when text appears or disappears.
-        Box(
+        if (state.gameMode == GameMode.TRAINING) Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(coachLineHeight),
