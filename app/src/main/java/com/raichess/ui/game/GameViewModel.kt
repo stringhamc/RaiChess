@@ -576,7 +576,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (move != null) {
                 applyMove(move)
             }
-            if (!checkGameOver()) {
+            val gameEnded = checkGameOver()
+            // Publish the grade even — especially — when the reply ended the
+            // game: the move that walks into mate is the most coaching-worthy
+            // move there is. finishGame has already settled winPercent to the
+            // result and cleared the undo nudge (undo isn't available now).
+            if (gameEnded && coaching && playerMoveRating != null) {
+                _uiState.value = _uiState.value.copy(lastMoveRating = playerMoveRating)
+            }
+            if (!gameEnded) {
                 val current = _uiState.value
                 _uiState.value = current.copy(
                     isAiThinking = false,
@@ -677,8 +685,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerTurn = false,
             ending = ending,
             eloDelta = delta,
-            canUndo = false
+            canUndo = false,
+            canHint = false,
+            coachWarning = false,
+            // The result settles the eval — a pre-move win% would sit stale
+            // next to the verdict on the game-over screen
+            winPercent = if (state.gameMode == GameMode.TRAINING) {
+                terminalWinPercent(ending)
+            } else {
+                null
+            }
         )
+    }
+
+    private fun terminalWinPercent(ending: GameEnding): Int = when (ending) {
+        GameEnding.CHECKMATE_WIN -> 100
+        GameEnding.CHECKMATE_LOSS, GameEnding.RESIGNED -> 0
+        GameEnding.DRAW -> 50
     }
 
     /**
