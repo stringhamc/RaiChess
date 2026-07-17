@@ -126,6 +126,10 @@ class StockfishWasmEngine(
             try {
                 analyzeAtCurrentStrength(board, moveTimeMs)
             } finally {
+                // Fire-and-forget restore, not synchronous: safe because
+                // send() posts to one main-thread Handler (FIFO), so this is
+                // guaranteed to run before any command a later engine call
+                // enqueues. Don't "fix" this into a blocking wait.
                 if (liftSkillLimit) config.getUciCommands().forEach { send(it) }
             }
         } catch (e: Exception) {
