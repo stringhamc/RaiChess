@@ -625,6 +625,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             moveSeq = state.moveSeq + 1,
             canUndo = false, // re-enabled when the turn returns to the player
             // Any move invalidates the current hint, warning, and grade
+            canHint = false,
             hintLevel = 0,
             hintText = null,
             hintHighlights = emptySet(),
@@ -790,9 +791,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private const val MIN_AI_MOVE_DELAY_MS = 350L
 
         // Coach/hint search budget per position. Two run per full move in
-        // Training: grading the player's move hides inside the AI-thinking
-        // pause, and the new-position baseline runs after turn handoff —
-        // neither delays the player's control of the board.
+        // Training: grading the player's move runs during the AI-thinking
+        // pause (fully hidden when the opponent's own search dominates; at
+        // the fastest Stockfish bands it adds up to ~200ms to the reply —
+        // an accepted cost of grading every move), and the new-position
+        // baseline runs after turn handoff. Neither blocks board input.
         private const val COACH_ANALYZE_MS = 200L
 
         // The third hint tap's search budget: long enough for a genuinely
