@@ -332,17 +332,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     winPercent = WinProbability.percent(deep.effectiveCp())
                 )
             } finally {
-                val current = _uiState.value
-                _uiState.value = current.copy(
-                    isDeepHintRunning = false,
-                    canUndo = canUndo(
-                        mode = current.gameMode,
-                        isPlaying = current.phase == GamePhase.PLAYING,
-                        isPlayerTurn = current.isPlayerTurn,
-                        isAiThinking = current.isAiThinking,
-                        moveCount = moveList.size
+                // Same staleness discipline as every other async write: a
+                // new game already reset these fields in startGame, so a
+                // stale coroutine must not touch the new game's state
+                if (gameId == currentGameId) {
+                    val current = _uiState.value
+                    _uiState.value = current.copy(
+                        isDeepHintRunning = false,
+                        canUndo = canUndo(
+                            mode = current.gameMode,
+                            isPlaying = current.phase == GamePhase.PLAYING,
+                            isPlayerTurn = current.isPlayerTurn,
+                            isAiThinking = current.isAiThinking,
+                            moveCount = moveList.size
+                        )
                     )
-                )
+                }
             }
         }
     }
