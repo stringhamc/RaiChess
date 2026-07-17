@@ -1,7 +1,6 @@
 package com.raichess.ui.game
 
 import android.app.Application
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.bhlangonijr.chesslib.Board
@@ -17,7 +16,6 @@ import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.data.engine.ChessEngine
 import com.raichess.data.engine.EngineFactory
 import com.raichess.data.engine.RaiEngine
-import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.SettingsRepository
@@ -26,12 +24,13 @@ import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.MoveClassification
 import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.PgnBuilder
 import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.model.PositionAnalysis
-import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.UndoPenalty
+import com.raichess.domain.model.WinProbability
 import com.raichess.domain.model.canUndo
 import com.raichess.domain.usecase.HintAdvisor
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +87,10 @@ data class GameUiState(
     val hintCount: Int = 0,
     /** True when the player's last move lost blunder-level ground (Training). */
     val coachWarning: Boolean = false,
+    /** Live grade of the player's last move (Training; null until graded). */
+    val lastMoveRating: MoveClassification? = null,
+    /** Player's live winning chances 0–100 (Training; null until analyzed). */
+    val winPercent: Int? = null,
     val moveHistorySan: List<String> = emptyList(),
     val isPlayerTurn: Boolean = false,
     val isAiThinking: Boolean = false,
@@ -101,7 +104,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PlayerProfileRepository(application)
     private val practiceRepository = PracticeRepository(application)
     private val settingsRepository = SettingsRepository(application)
-    private val gameRepository = GameRepository(application)
     private var board = Board()
     private var moveList = MoveList()
     private var engine: ChessEngine? = null
@@ -124,8 +126,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Analysis of the position the player is currently looking at (Training). */
     private var currentAnalysis: CachedAnalysis? = null
-    /** The player's worst substantive weakness, for personalized rung-1 hints. */
-    private var topWeakness: ThemeTag? = null
 
     private val _uiState = MutableStateFlow(
         repository.getStats().let { stats ->
@@ -182,17 +182,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameUndoCount = 0
         gameHintCount = 0
         currentAnalysis = null
-        // Refresh the weakness profile once per game for personalized hints
-        viewModelScope.launch {
-            topWeakness = try {
-                gameRepository.weaknessProfile().weaknesses.firstOrNull()?.theme
-            } catch (e: Exception) {
-                // Hints degrade to generic nudges; log so a broken profile
-                // fetch isn't invisible when debugging personalization
-                Log.w(TAG, "weakness profile unavailable", e)
-                null
-            }
-        }
 
         _uiState.value = state.copy(
             phase = GamePhase.PLAYING,
@@ -217,7 +206,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             hintText = null,
             hintHighlights = emptySet(),
             hintCount = 0,
-            coachWarning = false
+            coachWarning = false,
+            lastMoveRating = null,
+            winPercent = null
         )
 
         if (color == PlayerColor.BLACK) {
@@ -250,7 +241,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // different position than the one on screen
         val cached = currentAnalysis?.takeIf { it.fen == board.fen } ?: return
         val nextLevel = state.hintLevel + 1
-        val hint = HintAdvisor.hint(nextLevel, cached.analysis, state.squares, topWeakness) ?: return
+        val hint = HintAdvisor.hint(nextLevel, cached.analysis, cached.fen) ?: return
         gameHintCount++
         _uiState.value = state.copy(
             hintLevel = nextLevel,
@@ -283,7 +274,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             // refreshBaseline for the newer position will supply the cache
             if (analysis == null || board.fen != positionFen) return@launch
             currentAnalysis = CachedAnalysis(positionFen, analysis)
-            _uiState.value = _uiState.value.copy(canHint = _uiState.value.isPlayerTurn)
+            _uiState.value = _uiState.value.copy(
+                canHint = _uiState.value.isPlayerTurn,
+                // Baseline positions are player-to-move, so effectiveCp is
+                // already the player's perspective
+                winPercent = WinProbability.percent(analysis.effectiveCp())
+            )
         }
     }
 
@@ -373,7 +369,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             hintLevel = 0,
             hintText = null,
             hintHighlights = emptySet(),
-            coachWarning = false
+            coachWarning = false,
+            lastMoveRating = null,
+            winPercent = null
             // moveSeq deliberately not incremented: undo never animates
         )
         currentAnalysis = null
@@ -397,16 +395,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val fenBeforeMove = board.fen
         applyMove(move)
         if (!checkGameOver()) {
-            makeAiMove(playerMoveBaselineFen = fenBeforeMove)
+            makeAiMove(
+                playerMoveBaselineFen = fenBeforeMove,
+                playerMoveLan = move.toString().lowercase()
+            )
         }
     }
 
     /**
      * @param playerMoveBaselineFen the position the player just moved from,
-     *   for blunder grading — null when there is no player move to grade
+     *   for move grading — null when there is no player move to grade
      *   (the AI's opening move as White)
+     * @param playerMoveLan the move the player just played, for the BEST
+     *   classification when it matches the engine's own choice
      */
-    private fun makeAiMove(playerMoveBaselineFen: String? = null) {
+    private fun makeAiMove(
+        playerMoveBaselineFen: String? = null,
+        playerMoveLan: String? = null
+    ) {
         val currentEngine = engine ?: return
         val currentGameId = gameId
         // Snapshot the position so the background search never touches the
@@ -430,6 +436,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             var playerMoveLoss = 0
+            var playerMoveRating: MoveClassification? = null
             val move = withContext(Dispatchers.Default) {
                 // ChessEngine.selectMove is single-caller only (see its KDoc):
                 // never launch overlapping AI-move coroutines, or the engine's
@@ -446,6 +453,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         val afterMove = currentEngine.analyze(searchBoard, COACH_ANALYZE_MS)
                         if (afterMove != null) {
                             playerMoveLoss = MoveClassifier.lossBetween(baseline, afterMove)
+                            playerMoveRating = MoveClassifier.classify(
+                                playerMoveLoss,
+                                playedEngineBest = playerMoveLan != null &&
+                                    playerMoveLan == baseline.bestMoveLan
+                            )
                         }
                     }
                     currentEngine.selectMove(searchBoard)
@@ -474,6 +486,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     // the practice position) is the recovery path
                     coachWarning = coaching &&
                         playerMoveLoss >= MoveClassifier.BLUNDER_THRESHOLD_CP,
+                    lastMoveRating = playerMoveRating,
                     canUndo = canUndo(
                         mode = current.gameMode,
                         isPlaying = true,
@@ -507,11 +520,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerInCheck = isPlayerInCheck(),
             moveSeq = state.moveSeq + 1,
             canUndo = false, // re-enabled when the turn returns to the player
-            // Any move invalidates the current hint and coach warning
+            // Any move invalidates the current hint, warning, and grade
             hintLevel = 0,
             hintText = null,
             hintHighlights = emptySet(),
-            coachWarning = false
+            coachWarning = false,
+            lastMoveRating = null
         )
     }
 
@@ -669,7 +683,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        private const val TAG = "GameViewModel"
         private const val MIN_AI_MOVE_DELAY_MS = 350L
 
         // Coach/hint search budget per position. Two run per full move in

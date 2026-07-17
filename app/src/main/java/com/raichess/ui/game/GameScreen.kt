@@ -38,11 +38,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.MaterialCalculator
+import com.raichess.domain.model.MoveClassification
 import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.usecase.HintAdvisor
 import com.raichess.ui.theme.ChessColors
@@ -93,21 +96,26 @@ fun GameScreen(
             modifier = Modifier.padding(vertical = 6.dp)
         )
 
-        // Coach line: a hint the player asked for, or a passive warning
-        // that the last move lost serious ground (Training mode only)
-        val coachText = state.hintText?.let { "Hint: $it" }
-            ?: if (state.coachWarning) {
-                "Coach: that last move may have lost ground — consider Undo."
-            } else {
-                null
+        // Coach line (Training): a requested hint, else the live move
+        // rating and win chances. Fixed-height slot so the board never
+        // reflows when text appears or disappears.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(coachLineHeight),
+            contentAlignment = Alignment.Center
+        ) {
+            val coachText = state.hintText?.let { "Hint: $it" } ?: coachStatusLine(state)
+            if (coachText != null) {
+                Text(
+                    text = coachText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-        if (coachText != null) {
-            Text(
-                text = coachText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
         }
 
         CapturedRow(pieces = opponentCaptures, advantage = -playerDiff)
@@ -460,6 +468,29 @@ private fun MoveHistory(moves: List<String>, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(vertical = 6.dp)
     )
+}
+
+private val coachLineHeight = 34.dp
+
+/**
+ * The live coach readout: last move's grade (with an undo nudge on a
+ * blunder) and the player's current winning chances. Null when there's
+ * nothing to show (Rated mode, or nothing graded/analyzed yet).
+ */
+private fun coachStatusLine(state: GameUiState): String? {
+    val parts = mutableListOf<String>()
+    state.lastMoveRating?.let { rating ->
+        val label = when (rating) {
+            MoveClassification.BEST -> "Best move!"
+            MoveClassification.GOOD -> "Good move"
+            MoveClassification.INACCURACY -> "Inaccuracy"
+            MoveClassification.MISTAKE -> "Mistake"
+            MoveClassification.BLUNDER -> "Blunder"
+        }
+        parts += if (state.coachWarning) "$label — consider Undo" else label
+    }
+    state.winPercent?.let { parts += "Win $it%" }
+    return if (parts.isEmpty()) null else parts.joinToString("  ·  ")
 }
 
 private fun findKingSquare(squares: List<Char?>, playerColor: PlayerColor): Int? {
