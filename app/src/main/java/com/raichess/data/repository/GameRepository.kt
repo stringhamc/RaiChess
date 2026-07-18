@@ -8,6 +8,7 @@ import com.raichess.data.database.RaiChessDatabase
 import com.raichess.domain.model.CompletedGame
 import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.ThemeTag
+import com.raichess.domain.usecase.DrillSelector
 import com.raichess.domain.usecase.GameAnalyzer
 import com.raichess.domain.usecase.MistakeObservation
 import com.raichess.domain.usecase.WeaknessProfile
@@ -54,6 +55,21 @@ class GameRepository(context: Context) {
 
     /** Re-queue games analyzed by an older pipeline version for re-analysis. */
     suspend fun requeueOutdatedAnalyses() = dao.requeueOutdatedAnalyses(GameAnalyzer.VERSION)
+
+    /**
+     * The player's drillable analyzed mistakes (stored best move = answer
+     * key), newest games first, mapped for the practice queue.
+     */
+    suspend fun mistakeDrills(limit: Int = 100): List<DrillSelector.MistakeDrill> =
+        dao.mistakeDrillRows(MoveClassifier.MISTAKE_THRESHOLD_CP, limit).map { row ->
+            DrillSelector.MistakeDrill(
+                id = "mistake:${row.gameId}:${row.ply}",
+                fen = row.fen,
+                bestMoveLan = row.bestMove,
+                playedLan = row.movePlayed,
+                themes = ThemeTag.fromCsv(row.themes)
+            )
+        }
 
     suspend fun recordAnalysis(gameId: Long, report: GameAnalyzer.GameReport) {
         val rows = report.moves.map { move ->

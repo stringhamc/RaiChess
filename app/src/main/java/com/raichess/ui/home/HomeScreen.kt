@@ -58,7 +58,8 @@ fun HomeScreen(
     onPlayerColorChanged: (PlayerColor) -> Unit,
     onGameModeChanged: (GameMode) -> Unit,
     onAnimationsChanged: (Boolean) -> Unit,
-    onStartGame: (randomColor: Boolean) -> Unit
+    onStartGame: (randomColor: Boolean) -> Unit,
+    onPractice: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -226,6 +227,13 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Random Color")
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        OutlinedButton(
+            onClick = onPractice,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Practice")
         }
 
         Spacer(modifier = Modifier.height(20.dp))

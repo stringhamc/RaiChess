@@ -96,6 +96,48 @@ class PracticeRepository(context: Context) {
     }
 
     /**
+     * Record one practice attempt for a drill (spaced-repetition inputs:
+     * attempt count, running success rate, recency). Upserts by [drillId] —
+     * puzzle drills use "puzzle:<lichessId>", mistake drills
+     * "mistake:<gameId>:<ply>" — so progress rows exist only for material
+     * the player has actually attempted. Deliberately outside the 200-row
+     * mistake-capture cap: [PracticePositionStore.withPosition] maintains
+     * that list; this is per-drill bookkeeping.
+     */
+    suspend fun recordDrillResult(drillId: String, fen: String, solved: Boolean) {
+        importLegacyIfNeeded()
+        writeMutex.withLock {
+            val now = System.currentTimeMillis()
+            val previous = dao.getAll().map { it.toDomain() }.firstOrNull { it.id == drillId }
+            val updated = if (previous != null) {
+                previous.copy(
+                    timesPracticed = previous.timesPracticed + 1,
+                    successRate = (previous.successRate * previous.timesPracticed +
+                        (if (solved) 1.0 else 0.0)) / (previous.timesPracticed + 1),
+                    lastPracticed = now
+                )
+            } else {
+                PracticePosition(
+                    id = drillId,
+                    sourceGameId = null,
+                    sourceMoveNumber = 0,
+                    fen = fen,
+                    category = PracticeCategory.TACTICS,
+                    timesPracticed = 1,
+                    successRate = if (solved) 1.0 else 0.0,
+                    lastPracticed = now,
+                    createdAt = now
+                )
+            }
+            dao.insertAll(listOf(updated.toEntity())) // REPLACE conflict = upsert
+        }
+    }
+
+    /** Stored drill/practice progress keyed by id, for queue building. */
+    suspend fun progressById(): Map<String, PracticePosition> =
+        getPositions().associateBy { it.id }
+
+    /**
      * One-time import of the pre-Room SharedPreferences store. The flag is
      * set even when the blob is absent or corrupt — either way there will
      * never be anything (more) to import.
