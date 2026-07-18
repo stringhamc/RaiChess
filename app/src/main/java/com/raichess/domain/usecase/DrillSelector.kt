@@ -37,6 +37,11 @@ object DrillSelector {
         val bestMoveLan: String,
         /** The move the player actually played back then. */
         val playedLan: String,
+        /**
+         * Mistake themes from analysis. Not consulted by the current
+         * ordering (mistakes sort by due-ness + recency only); carried so
+         * a future weakness-first mistake ordering can mirror puzzles.
+         */
         val themes: Set<ThemeTag>
     )
 
