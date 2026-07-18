@@ -44,10 +44,33 @@ object PracticePositionStore {
      * successRate, lastPracticed) is preserved. The oldest entries beyond
      * [MAX_POSITIONS] are evicted.
      */
+    fun withPosition(
+        existing: List<PracticePosition>,
+        new: PracticePosition
+    ): List<PracticePosition> {
+        val previous = existing.firstOrNull { it.fen == new.fen }
+        val merged = if (previous != null) {
+            new.copy(
+                timesPracticed = previous.timesPracticed,
+                successRate = previous.successRate,
+                lastPracticed = previous.lastPracticed
+            )
+        } else {
+            new
+        }
+        return (listOf(merged) + existing.filter { it.fen != new.fen })
+            .take(MAX_POSITIONS)
+    }
+
     /**
      * Spaced-repetition bookkeeping for one drill attempt: running success
      * average, attempt count, recency. Creates the progress row on first
      * attempt. Pure, so the averaging math is testable without Room.
+     *
+     * Progress rows are always TACTICS (even for "mistake:" drill ids):
+     * MISTAKE_CORRECTION is reserved for the undo-captured positions,
+     * whose FEN-dedup + eviction cap sweeps that whole category and must
+     * never touch drill progress.
      */
     fun updatedProgress(
         previous: PracticePosition?,
@@ -75,23 +98,5 @@ object PracticePositionStore {
                 (if (solved) 1.0 else 0.0)) / (previous.timesPracticed + 1),
             lastPracticed = nowMs
         )
-    }
-
-    fun withPosition(
-        existing: List<PracticePosition>,
-        new: PracticePosition
-    ): List<PracticePosition> {
-        val previous = existing.firstOrNull { it.fen == new.fen }
-        val merged = if (previous != null) {
-            new.copy(
-                timesPracticed = previous.timesPracticed,
-                successRate = previous.successRate,
-                lastPracticed = previous.lastPracticed
-            )
-        } else {
-            new
-        }
-        return (listOf(merged) + existing.filter { it.fen != new.fen })
-            .take(MAX_POSITIONS)
     }
 }

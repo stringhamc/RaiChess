@@ -25,6 +25,9 @@ import os
 import sys
 import urllib.request
 
+# No checksum pinning: Lichess republishes this dump regularly, so there is
+# no stable hash to pin against. Dev-only tool; every sampled row is
+# format-validated before it reaches the asset.
 DB_URL = "https://database.lichess.org/lichess_db_puzzle.csv.zst"
 DEFAULT_OUT = os.path.join(
     os.path.dirname(__file__), "..", "app", "src", "main", "assets",

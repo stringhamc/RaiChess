@@ -18,6 +18,9 @@ import com.raichess.data.repository.PuzzleRepository
 import com.raichess.domain.usecase.DrillSelector
 import com.raichess.domain.usecase.GameAnalyzer
 import com.raichess.domain.usecase.PuzzleDrill
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /** One drill's on-screen phase. */
@@ -59,6 +62,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     private var queue: List<DrillSelector.Drill> = emptyList()
     private var queueIndex = 0
+    private var loadJob: Job? = null
     private var activePuzzle: PuzzleDrill? = null
     private var activeMistake: DrillSelector.MistakeDrill? = null
     private var board = Board()
@@ -77,9 +81,14 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     private fun loadQueue(source: DrillSelector.Source) {
         _uiState.value = _uiState.value.copy(loading = true, source = source)
-        viewModelScope.launch {
+        // Cancel any in-flight load so rapid source switching can't let a
+        // slower, stale load finish last and overwrite the newer queue
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             val mistakes = try {
                 gameRepository.mistakeDrills()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "mistake drills unavailable", e)
                 emptyList()
@@ -87,16 +96,23 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             val puzzles = puzzleRepository.getPuzzles()
             val progress = try {
                 practiceRepository.progressById()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "drill progress unavailable", e)
                 emptyMap()
             }
             val weaknesses = try {
                 gameRepository.weaknessProfile().weaknesses.map { it.theme }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "weakness profile unavailable", e)
                 emptyList()
             }
+            // A newer loadQueue cancelled this job while it was suspended
+            // above: bail before touching queue state
+            ensureActive()
             queue = DrillSelector.buildQueue(
                 source = source,
                 mistakes = mistakes,
