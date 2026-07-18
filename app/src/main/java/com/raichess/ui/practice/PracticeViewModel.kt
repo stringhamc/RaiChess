@@ -136,7 +136,13 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     fun nextDrill() {
         if (queue.isEmpty()) return
-        queueIndex = (queueIndex + 1) % queue.size
+        if (queueIndex + 1 >= queue.size) {
+            // Full pass done — rebuild instead of wrapping, so due-ness and
+            // ordering reflect the results recorded during this session
+            loadQueue(_uiState.value.source)
+            return
+        }
+        queueIndex++
         startDrill(queue[queueIndex])
     }
 
