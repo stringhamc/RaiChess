@@ -153,13 +153,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         if (puzzle != null) {
             val running = PuzzleDrill(puzzle)
             if (running.isFinished) { // corrupt data: skip it
-                queue = queue.filterNot { it === drill }
-                if (queue.isEmpty()) {
-                    _uiState.value = _uiState.value.copy(queueEmpty = true)
-                } else {
-                    queueIndex %= queue.size
-                    startDrill(queue[queueIndex])
-                }
+                skipCorruptDrill(drill)
                 return
             }
             activePuzzle = running
@@ -176,8 +170,16 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             )
         } else {
             val mistake = drill.mistake ?: return
+            // Same fail-closed treatment as corrupt puzzles: a malformed
+            // stored FEN must skip the drill, not crash the screen
+            board = try {
+                Board().apply { loadFromFen(mistake.fen) }
+            } catch (e: Exception) {
+                Log.w(TAG, "corrupt mistake FEN, skipping drill", e)
+                skipCorruptDrill(drill)
+                return
+            }
             activeMistake = mistake
-            board = Board().apply { loadFromFen(mistake.fen) }
             _uiState.value = _uiState.value.copy(
                 squares = boardSnapshot(),
                 playerIsWhite = board.sideToMove == Side.WHITE,
@@ -188,6 +190,17 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 legalTargets = emptySet(),
                 revealHighlights = emptySet()
             )
+        }
+    }
+
+    /** Drop a corrupt entry and move on to whatever now sits at its slot. */
+    private fun skipCorruptDrill(drill: DrillSelector.Drill) {
+        queue = queue.filterNot { it === drill }
+        if (queue.isEmpty()) {
+            _uiState.value = _uiState.value.copy(queueEmpty = true)
+        } else {
+            queueIndex %= queue.size
+            startDrill(queue[queueIndex])
         }
     }
 
