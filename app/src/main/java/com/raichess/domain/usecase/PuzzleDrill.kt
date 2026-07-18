@@ -71,6 +71,10 @@ class PuzzleDrill(val puzzle: Puzzle) {
      * Submit the player's move in LAN. Correct moves are applied (with the
      * opponent's scripted reply, when the line continues); wrong moves
      * leave the position untouched so the player sees the reveal in place.
+     *
+     * A corrupt continuation (a scripted move that isn't legal in the
+     * position) ends the drill as Solved: everything the player did was
+     * right, and Continue on a finished drill would crash the next submit.
      */
     fun submit(moveLan: String): Outcome {
         check(!isFinished) { "drill already finished" }
@@ -79,14 +83,14 @@ class PuzzleDrill(val puzzle: Puzzle) {
             isFinished = true
             return Outcome.Wrong(expected)
         }
-        applyLan(expected)
+        if (!applyLan(expected)) return Outcome.Solved
         nextIndex++
         if (nextIndex >= puzzle.moves.size) {
             isFinished = true
             return Outcome.Solved
         }
         val reply = puzzle.moves[nextIndex]
-        applyLan(reply)
+        if (!applyLan(reply)) return Outcome.Solved
         nextIndex++
         if (nextIndex >= puzzle.moves.size) {
             // Defensive: a well-formed line never ends on an opponent move
@@ -97,12 +101,14 @@ class PuzzleDrill(val puzzle: Puzzle) {
         return Outcome.Continue(reply)
     }
 
-    private fun applyLan(lan: String) {
+    /** Applies [lan], or fails the drill closed if it isn't legal. */
+    private fun applyLan(lan: String): Boolean {
         val move = GameAnalyzer.lanToLegalMove(board, lan)
         if (move == null) {
             isFinished = true
-            return
+            return false
         }
         board.doMove(move)
+        return true
     }
 }

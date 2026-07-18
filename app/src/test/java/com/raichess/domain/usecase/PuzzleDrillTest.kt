@@ -68,6 +68,17 @@ class PuzzleDrillTest {
     }
 
     @Test
+    fun `corrupt mid-line reply ends the drill instead of continuing`() {
+        // Same line as mateInTwo but the scripted reply after Ra8+ is
+        // illegal — the drill must finish (as solved), never Continue
+        val drill = PuzzleDrill(
+            mateInTwo.copy(moves = listOf("b7b6", "a1a8", "h1h5", "b1h1"))
+        )
+        assertEquals(PuzzleDrill.Outcome.Solved, drill.submit("a1a8"))
+        assertTrue(drill.isFinished)
+    }
+
+    @Test
     fun `corrupt setup move fails closed`() {
         val drill = PuzzleDrill(
             Puzzle("bad", "k7/4P3/8/8/8/8/8/K7 b - - 0 1",
