@@ -5,6 +5,8 @@ import android.util.Log
 import com.raichess.domain.model.Puzzle
 import com.raichess.domain.model.PuzzleCsv
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -18,21 +20,23 @@ class PuzzleRepository(context: Context) {
     private val appContext = context.applicationContext
 
     @Volatile private var cache: List<Puzzle>? = null
+    private val loadMutex = Mutex()
 
     suspend fun getPuzzles(): List<Puzzle> {
         cache?.let { return it }
-        return withContext(Dispatchers.IO) {
-            val loaded = try {
-                appContext.assets.open(ASSET_PATH)
-                    .bufferedReader()
-                    .use { it.readText() }
-                    .let { PuzzleCsv.parse(it) }
-            } catch (e: Exception) {
-                Log.w(TAG, "failed to load puzzle asset", e)
-                emptyList()
-            }
-            cache = loaded
-            loaded
+        // Mutex so concurrent first callers parse the asset once, not twice
+        return loadMutex.withLock {
+            cache ?: withContext(Dispatchers.IO) {
+                try {
+                    appContext.assets.open(ASSET_PATH)
+                        .bufferedReader()
+                        .use { it.readText() }
+                        .let { PuzzleCsv.parse(it) }
+                } catch (e: Exception) {
+                    Log.w(TAG, "failed to load puzzle asset", e)
+                    emptyList()
+                }
+            }.also { cache = it }
         }
     }
 

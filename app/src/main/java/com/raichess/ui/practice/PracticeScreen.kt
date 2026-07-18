@@ -115,9 +115,9 @@ fun PracticeScreen(
                 ) {
                     ChessBoard(
                         squares = state.squares,
-                    selectedSquare = state.selectedSquare,
-                    legalTargets = state.legalTargets,
-                    hintHighlights = state.revealHighlights,
+                        selectedSquare = state.selectedSquare,
+                        legalTargets = state.legalTargets,
+                        hintHighlights = state.revealHighlights,
                         lastMove = null,
                         lastMoveByOpponent = false,
                         checkedKingSquare = null,

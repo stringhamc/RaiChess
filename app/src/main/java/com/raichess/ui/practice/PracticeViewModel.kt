@@ -1,6 +1,7 @@
 package com.raichess.ui.practice
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.bhlangonijr.chesslib.Board
@@ -80,17 +81,20 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             val mistakes = try {
                 gameRepository.mistakeDrills()
             } catch (e: Exception) {
+                Log.w(TAG, "mistake drills unavailable", e)
                 emptyList()
             }
             val puzzles = puzzleRepository.getPuzzles()
             val progress = try {
                 practiceRepository.progressById()
             } catch (e: Exception) {
+                Log.w(TAG, "drill progress unavailable", e)
                 emptyMap()
             }
             val weaknesses = try {
                 gameRepository.weaknessProfile().weaknesses.map { it.theme }
             } catch (e: Exception) {
+                Log.w(TAG, "weakness profile unavailable", e)
                 emptyList()
             }
             queue = DrillSelector.buildQueue(
@@ -186,8 +190,13 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         val matches = MoveGenerator.generateLegalMoves(board)
             .filter { it.from == from && it.to == to }
         if (matches.isEmpty()) return
-        // Multiple matches means promotion; auto-queen, as in play
-        val move = matches.firstOrNull { it.promotion.pieceType == PieceType.QUEEN }
+        // Multiple matches means promotion. Unlike live play (auto-queen),
+        // a drill knows its answer key — prefer the expected promotion so
+        // underpromotion solutions from real Lichess data stay solvable
+        // through the tap-to-move UI, falling back to queen otherwise.
+        val expected = activePuzzle?.expectedLan ?: activeMistake?.bestMoveLan?.lowercase()
+        val move = matches.firstOrNull { it.toString().lowercase() == expected }
+            ?: matches.firstOrNull { it.promotion.pieceType == PieceType.QUEEN }
             ?: matches.first()
 
         val puzzle = activePuzzle
@@ -239,14 +248,13 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 practiceRepository.recordDrillResult(drillId, fen, solved)
             } catch (e: Exception) {
                 // Progress bookkeeping must never break the drill flow
+                Log.w(TAG, "failed to record drill result", e)
             }
         }
-        val reveal = revealLan?.let { lan ->
-            setOfNotNull(
-                GameAnalyzer.lanToLegalMove(board, lan)?.from?.ordinal,
-                GameAnalyzer.lanToLegalMove(board, lan)?.to?.ordinal
-            )
-        } ?: emptySet()
+        val reveal = revealLan
+            ?.let { GameAnalyzer.lanToLegalMove(board, it) }
+            ?.let { setOf(it.from.ordinal, it.to.ordinal) }
+            ?: emptySet()
         _uiState.value = state.copy(
             squares = boardSnapshot(),
             phase = if (solved) DrillPhase.SOLVED else DrillPhase.FAILED,
@@ -287,4 +295,8 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     private fun formatLan(lan: String) =
         if (lan.length >= 4) "${lan.substring(0, 2)} → ${lan.substring(2, 4)}" else lan
+
+    companion object {
+        private const val TAG = "PracticeViewModel"
+    }
 }

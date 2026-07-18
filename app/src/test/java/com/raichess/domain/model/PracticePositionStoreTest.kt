@@ -6,6 +6,30 @@ import org.junit.Test
 
 class PracticePositionStoreTest {
 
+    @org.junit.Test
+    fun `updatedProgress creates a first-attempt row`() {
+        val row = PracticePositionStore.updatedProgress(
+            previous = null, drillId = "puzzle:x", fen = "f", solved = true, nowMs = 42L
+        )
+        org.junit.Assert.assertEquals("puzzle:x", row.id)
+        org.junit.Assert.assertEquals(1, row.timesPracticed)
+        org.junit.Assert.assertEquals(1.0, row.successRate, 1e-9)
+        org.junit.Assert.assertEquals(42L, row.lastPracticed)
+        org.junit.Assert.assertEquals(PracticeCategory.TACTICS, row.category)
+    }
+
+    @org.junit.Test
+    fun `updatedProgress keeps a running success average`() {
+        var row = PracticePositionStore.updatedProgress(null, "d", "f", solved = true, nowMs = 1L)
+        row = PracticePositionStore.updatedProgress(row, "d", "f", solved = false, nowMs = 2L)
+        org.junit.Assert.assertEquals(2, row.timesPracticed)
+        org.junit.Assert.assertEquals(0.5, row.successRate, 1e-9)
+        row = PracticePositionStore.updatedProgress(row, "d", "f", solved = false, nowMs = 3L)
+        org.junit.Assert.assertEquals(3, row.timesPracticed)
+        org.junit.Assert.assertEquals(1.0 / 3.0, row.successRate, 1e-9)
+        org.junit.Assert.assertEquals(3L, row.lastPracticed)
+    }
+
     private fun position(fen: String, createdAt: Long, timesPracticed: Int = 0) =
         PracticePosition(
             id = "id-$fen-$createdAt",

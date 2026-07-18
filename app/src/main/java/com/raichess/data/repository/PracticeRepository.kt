@@ -87,11 +87,15 @@ class PracticeRepository(context: Context) {
             createdAt = System.currentTimeMillis()
         )
         writeMutex.withLock {
+            // The 200-row cap and FEN dedup apply only to undo-captured
+            // MISTAKE_CORRECTION rows: drill-progress rows (other
+            // categories in the same table) must never be evicted by it
+            val category = PracticeCategory.MISTAKE_CORRECTION
             val updated = PracticePositionStore.withPosition(
-                dao.getAll().map { it.toDomain() },
+                dao.getByCategory(category.name).map { it.toDomain() },
                 position
             )
-            dao.replaceAll(updated.map { it.toEntity() })
+            dao.replaceCategory(category.name, updated.map { it.toEntity() })
         }
     }
 
@@ -107,28 +111,14 @@ class PracticeRepository(context: Context) {
     suspend fun recordDrillResult(drillId: String, fen: String, solved: Boolean) {
         importLegacyIfNeeded()
         writeMutex.withLock {
-            val now = System.currentTimeMillis()
-            val previous = dao.getAll().map { it.toDomain() }.firstOrNull { it.id == drillId }
-            val updated = if (previous != null) {
-                previous.copy(
-                    timesPracticed = previous.timesPracticed + 1,
-                    successRate = (previous.successRate * previous.timesPracticed +
-                        (if (solved) 1.0 else 0.0)) / (previous.timesPracticed + 1),
-                    lastPracticed = now
-                )
-            } else {
-                PracticePosition(
-                    id = drillId,
-                    sourceGameId = null,
-                    sourceMoveNumber = 0,
-                    fen = fen,
-                    category = PracticeCategory.TACTICS,
-                    timesPracticed = 1,
-                    successRate = if (solved) 1.0 else 0.0,
-                    lastPracticed = now,
-                    createdAt = now
-                )
-            }
+            val previous = dao.getById(drillId)?.toDomain()
+            val updated = PracticePositionStore.updatedProgress(
+                previous = previous,
+                drillId = drillId,
+                fen = fen,
+                solved = solved,
+                nowMs = System.currentTimeMillis()
+            )
             dao.insertAll(listOf(updated.toEntity())) // REPLACE conflict = upsert
         }
     }

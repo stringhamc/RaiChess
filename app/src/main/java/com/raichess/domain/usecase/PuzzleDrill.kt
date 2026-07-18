@@ -53,6 +53,9 @@ class PuzzleDrill(val puzzle: Puzzle) {
     /** FEN of the current drill position (after setup / replies). */
     val currentFen: String get() = board.fen
 
+    /** The move the line expects next from the player, or null when done. */
+    val expectedLan: String? get() = if (isFinished) null else puzzle.moves[nextIndex]
+
     /** A defensive copy of the current position for move generation. */
     fun boardCopy(): Board = Board().apply { loadFromFen(board.fen) }
 

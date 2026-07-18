@@ -44,6 +44,39 @@ object PracticePositionStore {
      * successRate, lastPracticed) is preserved. The oldest entries beyond
      * [MAX_POSITIONS] are evicted.
      */
+    /**
+     * Spaced-repetition bookkeeping for one drill attempt: running success
+     * average, attempt count, recency. Creates the progress row on first
+     * attempt. Pure, so the averaging math is testable without Room.
+     */
+    fun updatedProgress(
+        previous: PracticePosition?,
+        drillId: String,
+        fen: String,
+        solved: Boolean,
+        nowMs: Long
+    ): PracticePosition {
+        if (previous == null) {
+            return PracticePosition(
+                id = drillId,
+                sourceGameId = null,
+                sourceMoveNumber = 0,
+                fen = fen,
+                category = PracticeCategory.TACTICS,
+                timesPracticed = 1,
+                successRate = if (solved) 1.0 else 0.0,
+                lastPracticed = nowMs,
+                createdAt = nowMs
+            )
+        }
+        return previous.copy(
+            timesPracticed = previous.timesPracticed + 1,
+            successRate = (previous.successRate * previous.timesPracticed +
+                (if (solved) 1.0 else 0.0)) / (previous.timesPracticed + 1),
+            lastPracticed = nowMs
+        )
+    }
+
     fun withPosition(
         existing: List<PracticePosition>,
         new: PracticePosition
