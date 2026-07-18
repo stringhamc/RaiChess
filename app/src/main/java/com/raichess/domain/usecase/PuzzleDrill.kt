@@ -38,6 +38,13 @@ class PuzzleDrill(val puzzle: Puzzle) {
     /** The side the player is solving for. */
     val solverSide: Side
 
+    /**
+     * FEN of the position the player is asked to solve (after the setup
+     * move) — the right FEN to persist for this drill, unlike
+     * [Puzzle.fen], which is one ply earlier.
+     */
+    val startFen: String
+
     init {
         val setup = GameAnalyzer.lanToLegalMove(board, puzzle.moves[0])
         if (setup != null) {
@@ -48,6 +55,7 @@ class PuzzleDrill(val puzzle: Puzzle) {
             solverSide = board.sideToMove
             isFinished = true
         }
+        startFen = board.fen
     }
 
     /** FEN of the current drill position (after setup / replies). */

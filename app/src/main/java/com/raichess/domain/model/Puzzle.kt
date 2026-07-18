@@ -48,7 +48,8 @@ object PuzzleCsv {
         val rating = fields[3].trim().toIntOrNull() ?: return null
         val themes = fields[7].trim().split(' ').filter { it.isNotBlank() }.toSet()
         // A puzzle needs the setup move plus at least one player move, and
-        // the line must end on a player move (odd length)
+        // the line must end on a player move — an even total, since
+        // moves[0] is the opponent's setup
         if (id.isEmpty() || fen.isEmpty()) return null
         if (moves.size < 2 || moves.size % 2 != 0) return null
         return Puzzle(

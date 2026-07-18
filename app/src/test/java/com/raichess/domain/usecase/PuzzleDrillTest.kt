@@ -27,6 +27,16 @@ class PuzzleDrillTest {
     }
 
     @Test
+    fun `startFen is the position after the setup move and stays fixed`() {
+        val drill = PuzzleDrill(mateInTwo)
+        assertEquals(drill.currentFen, drill.startFen)
+        drill.submit("a1a8")
+        // currentFen advances with the line; startFen must not
+        assertTrue(drill.currentFen != drill.startFen)
+        assertTrue(drill.startFen.contains(" w "))
+    }
+
+    @Test
     fun `full line walks to solved with the scripted reply`() {
         val drill = PuzzleDrill(mateInTwo)
         val first = drill.submit("a1a8")

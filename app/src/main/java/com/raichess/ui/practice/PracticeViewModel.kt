@@ -19,9 +19,11 @@ import com.raichess.domain.usecase.DrillSelector
 import com.raichess.domain.usecase.GameAnalyzer
 import com.raichess.domain.usecase.PuzzleDrill
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** One drill's on-screen phase. */
 enum class DrillPhase { SOLVING, SOLVED, FAILED }
@@ -113,15 +115,19 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             // A newer loadQueue cancelled this job while it was suspended
             // above: bail before touching queue state
             ensureActive()
-            queue = DrillSelector.buildQueue(
-                source = source,
-                mistakes = mistakes,
-                puzzles = puzzles,
-                progressById = progress,
-                playerElo = profileRepository.getStats().currentElo,
-                weaknesses = weaknesses,
-                nowMs = System.currentTimeMillis()
-            )
+            // Off the main thread: the sort is trivial for the seed set but
+            // the fetch script can grow the asset to thousands of puzzles
+            queue = withContext(Dispatchers.Default) {
+                DrillSelector.buildQueue(
+                    source = source,
+                    mistakes = mistakes,
+                    puzzles = puzzles,
+                    progressById = progress,
+                    playerElo = profileRepository.getStats().currentElo,
+                    weaknesses = weaknesses,
+                    nowMs = System.currentTimeMillis()
+                )
+            }
             queueIndex = 0
             _uiState.value = _uiState.value.copy(loading = false, queueEmpty = queue.isEmpty())
             if (queue.isNotEmpty()) startDrill(queue[0])
@@ -258,7 +264,9 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         val state = _uiState.value
         val drillId = activePuzzle?.let { "puzzle:${it.puzzle.id}" }
             ?: activeMistake?.id ?: return
-        val fen = activePuzzle?.puzzle?.fen ?: activeMistake?.fen ?: return
+        // startFen, not puzzle.fen: the drilled position is one ply after
+        // the raw Lichess FEN (the setup move is already applied)
+        val fen = activePuzzle?.startFen ?: activeMistake?.fen ?: return
         viewModelScope.launch {
             try {
                 practiceRepository.recordDrillResult(drillId, fen, solved)
