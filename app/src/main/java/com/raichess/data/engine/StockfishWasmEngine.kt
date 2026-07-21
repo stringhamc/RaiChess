@@ -220,12 +220,18 @@ class StockfishWasmEngine(
             State.UNINITIALIZED -> Unit
         }
         initAttempts++
-        // The first attempt gets the full cold-compile budget; a retry runs
-        // synchronously inside a move, so halve its budgets to bound how
-        // long that one move can stall before falling back again
+        // A retry runs synchronously inside a move, so the fast steps
+        // (worker start, isready round-trips) run on half budgets. The
+        // uciok budget deliberately stays FULL: that's where the cold WASM
+        // compile lands — the failure mode the retry exists to rescue —
+        // and shrinking it would make the retry systematically worse at
+        // exactly that. Worst case for a fully-failed retry is then
+        // ~6+15+2.5+2.5s ≈ 26s of "thinking…", but in practice a step
+        // either fails much sooner or succeeds (a second compile usually
+        // hits the WebView's code cache and is far faster than the first).
         val retrying = initAttempts > 1
         val initBudget = if (retrying) INIT_TIMEOUT_MS / 2 else INIT_TIMEOUT_MS
-        val uciokBudget = if (retrying) UCIOK_TIMEOUT_MS / 2 else UCIOK_TIMEOUT_MS
+        val uciokBudget = UCIOK_TIMEOUT_MS
         val readyBudget = if (retrying) HANDSHAKE_TIMEOUT_MS / 2 else HANDSHAKE_TIMEOUT_MS
 
         output.clear()
