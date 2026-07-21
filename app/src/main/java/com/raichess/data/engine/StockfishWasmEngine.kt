@@ -319,7 +319,7 @@ class StockfishWasmEngine(
             // "no network, ever" guarantee robust regardless of the manifest.
             view.settings.blockNetworkLoads = true
             view.settings.allowFileAccess = false
-            view.addJavascriptInterface(Bridge(), "AndroidEngine")
+            view.addJavascriptInterface(Bridge(generation), "AndroidEngine")
             view.webViewClient = object : WebViewClientCompat() {
                 override fun shouldInterceptRequest(
                     view: WebView,
@@ -401,12 +401,26 @@ class StockfishWasmEngine(
         }
     }
 
-    private inner class Bridge {
-        @JavascriptInterface fun onReady() { output.offer(READY_SENTINEL) }
-        @JavascriptInterface fun onMessage(line: String) { output.offer(line.trim()) }
+    /**
+     * Generation-scoped like createWebView itself: teardown of an
+     * abandoned attempt's WebView is posted, not synchronous, so its JS
+     * side can fire a late callback in the window before that runs. A
+     * stale bridge must not write into the queue a newer attempt owns.
+     */
+    private inner class Bridge(private val generation: Int) {
+        private fun current() = generation == attemptGeneration
+
+        @JavascriptInterface fun onReady() {
+            if (current()) output.offer(READY_SENTINEL)
+        }
+
+        @JavascriptInterface fun onMessage(line: String) {
+            if (current()) output.offer(line.trim())
+        }
+
         @JavascriptInterface fun onError(message: String) {
             Log.w(TAG, "engine JS error: $message")
-            output.offer(ERROR_SENTINEL)
+            if (current()) output.offer(ERROR_SENTINEL)
         }
     }
 
