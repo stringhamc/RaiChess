@@ -87,13 +87,45 @@ class PracticeRepository(context: Context) {
             createdAt = System.currentTimeMillis()
         )
         writeMutex.withLock {
+            // The 200-row cap and FEN dedup apply only to undo-captured
+            // MISTAKE_CORRECTION rows: drill-progress rows (other
+            // categories in the same table) must never be evicted by it
+            val category = PracticeCategory.MISTAKE_CORRECTION
             val updated = PracticePositionStore.withPosition(
-                dao.getAll().map { it.toDomain() },
+                dao.getByCategory(category.name).map { it.toDomain() },
                 position
             )
-            dao.replaceAll(updated.map { it.toEntity() })
+            dao.replaceCategory(category.name, updated.map { it.toEntity() })
         }
     }
+
+    /**
+     * Record one practice attempt for a drill (spaced-repetition inputs:
+     * attempt count, running success rate, recency). Upserts by [drillId] —
+     * puzzle drills use "puzzle:<lichessId>", mistake drills
+     * "mistake:<gameId>:<ply>" — so progress rows exist only for material
+     * the player has actually attempted. Deliberately outside the 200-row
+     * mistake-capture cap: [PracticePositionStore.withPosition] maintains
+     * that list; this is per-drill bookkeeping.
+     */
+    suspend fun recordDrillResult(drillId: String, fen: String, solved: Boolean) {
+        importLegacyIfNeeded()
+        writeMutex.withLock {
+            val previous = dao.getById(drillId)?.toDomain()
+            val updated = PracticePositionStore.updatedProgress(
+                previous = previous,
+                drillId = drillId,
+                fen = fen,
+                solved = solved,
+                nowMs = System.currentTimeMillis()
+            )
+            dao.insertAll(listOf(updated.toEntity())) // REPLACE conflict = upsert
+        }
+    }
+
+    /** Stored drill/practice progress keyed by id, for queue building. */
+    suspend fun progressById(): Map<String, PracticePosition> =
+        getPositions().associateBy { it.id }
 
     /**
      * One-time import of the pre-Room SharedPreferences store. The flag is

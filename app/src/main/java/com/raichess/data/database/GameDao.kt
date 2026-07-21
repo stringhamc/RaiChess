@@ -12,6 +12,16 @@ data class MistakeRow(
     val centipawnLoss: Int
 )
 
+/** Projection row for [GameDao.mistakeDrillRows] — a drillable mistake. */
+data class MistakeDrillRow(
+    val gameId: Long,
+    val ply: Int,
+    val fen: String,
+    val bestMove: String,
+    val movePlayed: String,
+    val themes: String
+)
+
 @Dao
 interface GameDao {
 
@@ -41,6 +51,21 @@ interface GameDao {
 
     @Query("UPDATE games SET accuracy = :accuracy, analysisState = :state WHERE id = :gameId")
     suspend fun setAnalysisResult(gameId: Long, accuracy: Double?, state: String)
+
+    /**
+     * The player's analyzed mistakes that can be drilled: the stored best
+     * move is the answer key, so only rows that have one qualify. Newest
+     * games first so practice tracks current play.
+     */
+    @Query(
+        "SELECT p.gameId AS gameId, p.ply AS ply, p.fen AS fen, " +
+            "p.bestMove AS bestMove, p.movePlayed AS movePlayed, p.themes AS themes " +
+            "FROM positions p JOIN games g ON p.gameId = g.id " +
+            "WHERE p.isPlayerMove = 1 AND p.centipawnLoss >= :minLossCp " +
+            "AND p.bestMove IS NOT NULL " +
+            "ORDER BY g.datePlayed DESC, p.ply ASC LIMIT :limit"
+    )
+    suspend fun mistakeDrillRows(minLossCp: Int, limit: Int): List<MistakeDrillRow>
 
     /**
      * The player's graded mistakes across analyzed games, newest game

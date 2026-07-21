@@ -9,6 +9,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raichess.data.analysis.AnalysisCoordinator
@@ -16,6 +19,8 @@ import com.raichess.ui.game.GamePhase
 import com.raichess.ui.game.GameScreen
 import com.raichess.ui.game.GameViewModel
 import com.raichess.ui.home.HomeScreen
+import com.raichess.ui.practice.PracticeScreen
+import com.raichess.ui.practice.PracticeViewModel
 import com.raichess.ui.theme.RaiChessTheme
 
 /**
@@ -46,6 +51,20 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
+    var showPractice by rememberSaveable { mutableStateOf(false) }
+
+    if (showPractice) {
+        val practiceViewModel: PracticeViewModel = viewModel()
+        val practiceState by practiceViewModel.uiState.collectAsState()
+        PracticeScreen(
+            state = practiceState,
+            onSquareTapped = practiceViewModel::onSquareTapped,
+            onSourceChanged = practiceViewModel::setSource,
+            onNext = practiceViewModel::nextDrill,
+            onBack = { showPractice = false }
+        )
+        return
+    }
 
     when (state.phase) {
         GamePhase.SETUP -> HomeScreen(
@@ -58,7 +77,8 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             onPlayerColorChanged = viewModel::setPlayerColor,
             onGameModeChanged = viewModel::setGameMode,
             onAnimationsChanged = viewModel::setAnimationsEnabled,
-            onStartGame = viewModel::startGame
+            onStartGame = viewModel::startGame,
+            onPractice = { showPractice = true }
         )
 
         GamePhase.PLAYING, GamePhase.GAME_OVER -> GameScreen(

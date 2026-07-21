@@ -61,4 +61,42 @@ object PracticePositionStore {
         return (listOf(merged) + existing.filter { it.fen != new.fen })
             .take(MAX_POSITIONS)
     }
+
+    /**
+     * Spaced-repetition bookkeeping for one drill attempt: running success
+     * average, attempt count, recency. Creates the progress row on first
+     * attempt. Pure, so the averaging math is testable without Room.
+     *
+     * Progress rows are always TACTICS (even for "mistake:" drill ids):
+     * MISTAKE_CORRECTION is reserved for the undo-captured positions,
+     * whose FEN-dedup + eviction cap sweeps that whole category and must
+     * never touch drill progress.
+     */
+    fun updatedProgress(
+        previous: PracticePosition?,
+        drillId: String,
+        fen: String,
+        solved: Boolean,
+        nowMs: Long
+    ): PracticePosition {
+        if (previous == null) {
+            return PracticePosition(
+                id = drillId,
+                sourceGameId = null,
+                sourceMoveNumber = 0,
+                fen = fen,
+                category = PracticeCategory.TACTICS,
+                timesPracticed = 1,
+                successRate = if (solved) 1.0 else 0.0,
+                lastPracticed = nowMs,
+                createdAt = nowMs
+            )
+        }
+        return previous.copy(
+            timesPracticed = previous.timesPracticed + 1,
+            successRate = (previous.successRate * previous.timesPracticed +
+                (if (solved) 1.0 else 0.0)) / (previous.timesPracticed + 1),
+            lastPracticed = nowMs
+        )
+    }
 }
