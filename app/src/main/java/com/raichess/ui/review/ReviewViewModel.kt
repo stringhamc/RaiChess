@@ -121,6 +121,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun toUi(row: PositionEntity): ReviewMistakeUi {
+        val best = row.bestMove?.let { moveSquares(it) }
         val kind = if (row.classification == "BLUNDER") "Blunder" else "Mistake"
         // Integer tenths keep the decimal locale-proof
         val tenths = (row.centipawnLoss ?: 0) / 10
@@ -133,10 +134,8 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             detail = "You played ${LanFormat.arrow(row.movePlayed)}$bestText.$why",
             squares = HintAdvisor.parseFenBoard(row.fen) ?: List(64) { null },
             playedMove = moveSquares(row.movePlayed),
-            bestMove = row.bestMove?.let { moveSquares(it) },
-            bestHighlights = row.bestMove?.let { lan ->
-                moveSquares(lan)?.let { setOf(it.from, it.to) }
-            } ?: emptySet()
+            bestMove = best,
+            bestHighlights = best?.let { setOf(it.from, it.to) } ?: emptySet()
         )
     }
 

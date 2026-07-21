@@ -220,15 +220,21 @@ class StockfishWasmEngine(
             State.UNINITIALIZED -> Unit
         }
         initAttempts++
+        // The first attempt gets the full cold-compile budget; a retry runs
+        // synchronously inside a move, so halve its budgets to bound how
+        // long that one move can stall before falling back again
+        val retrying = initAttempts > 1
+        val initBudget = if (retrying) INIT_TIMEOUT_MS / 2 else INIT_TIMEOUT_MS
+        val uciokBudget = if (retrying) UCIOK_TIMEOUT_MS / 2 else UCIOK_TIMEOUT_MS
 
         output.clear()
         mainHandler.post { createWebView() }
 
         // engine.html calls AndroidEngine.onReady() once the worker is created
-        val ready = awaitToken(INIT_TIMEOUT_MS) { it == READY_SENTINEL || it == ERROR_SENTINEL }
-        if (ready != READY_SENTINEL) return fail("worker did not start within ${INIT_TIMEOUT_MS}ms")
+        val ready = awaitToken(initBudget) { it == READY_SENTINEL || it == ERROR_SENTINEL }
+        if (ready != READY_SENTINEL) return fail("worker did not start within ${initBudget}ms")
 
-        if (!handshake()) return fail("uci handshake failed")
+        if (!handshake(uciokBudget)) return fail("uci handshake failed")
 
         // Apply strength for this ELO. The bundled SF10 build only supports
         // `Skill Level` (UCI_Elo/UCI_LimitStrength came in SF11), so
@@ -247,10 +253,10 @@ class StockfishWasmEngine(
         return true
     }
 
-    private fun handshake(): Boolean {
+    private fun handshake(uciokBudgetMs: Long): Boolean {
         send("uci")
         // uciok arrives only after the cold WASM compile — allow for that.
-        if (awaitToken(UCIOK_TIMEOUT_MS) { it == "uciok" } == null) return false
+        if (awaitToken(uciokBudgetMs) { it == "uciok" } == null) return false
         return isReady()
     }
 
