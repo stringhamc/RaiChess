@@ -147,6 +147,12 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val TAG = "ReviewViewModel"
+
+        /**
+         * Deliberately narrower than the live coach's "Why?" (which also
+         * covers INACCURACY): the review screen focuses on the misses
+         * worth replaying, not every half-pawn slip.
+         */
         private val GRADED = setOf("MISTAKE", "BLUNDER")
     }
 }

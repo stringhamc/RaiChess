@@ -545,11 +545,8 @@ private fun eloDeltaText(state: GameUiState): String {
 }
 
 /** Celebrate a rating personal best the moment it happens. */
-private fun newPeakText(state: GameUiState): String {
-    val stats = state.playerStats ?: return ""
-    val climbed = (state.eloDelta ?: 0) > 0
-    return if (climbed && stats.currentElo >= stats.peakElo) " New peak rating!" else ""
-}
+private fun newPeakText(state: GameUiState): String =
+    if (state.isNewPeak) " New peak rating!" else ""
 
 /** Losses feed the coaching loop — say so instead of just "you lose". */
 private fun lossEncouragement(): String = " This game becomes practice material."

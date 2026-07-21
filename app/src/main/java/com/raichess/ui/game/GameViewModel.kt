@@ -104,7 +104,9 @@ data class GameUiState(
     val isAiThinking: Boolean = false,
     val isPlayerInCheck: Boolean = false,
     val ending: GameEnding? = null,
-    val eloDelta: Int? = null
+    val eloDelta: Int? = null,
+    /** True when this game's result set a strictly new peak ELO. */
+    val isNewPeak: Boolean = false
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -227,6 +229,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerInCheck = false,
             ending = null,
             eloDelta = null,
+            isNewPeak = false,
             undoCount = 0,
             canUndo = false,
             moveSeq = 0,
@@ -755,6 +758,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             UndoPenalty.NEUTRAL_ACCURACY
         }
+        // Peak comparison must use the pre-game stats: recordResult already
+        // folded this game into peakElo, so equality afterwards can't tell
+        // a fresh high from re-climbing to a previous one
+        val previousPeak = state.playerStats?.peakElo
         val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy)
         persistFinishedGame(state, result, eloAfter = stats.currentElo, eloDelta = delta)
         _uiState.value = state.copy(
@@ -764,6 +771,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerTurn = false,
             ending = ending,
             eloDelta = delta,
+            isNewPeak = previousPeak != null && stats.peakElo > previousPeak,
             canUndo = false,
             canHint = false,
             coachWarning = false,
