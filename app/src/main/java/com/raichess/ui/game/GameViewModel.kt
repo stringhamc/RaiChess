@@ -24,6 +24,7 @@ import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.MoveClassification
 import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.PgnBuilder
@@ -741,8 +742,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val tenths = lossCp / 10
         val cost = "It cost about ${tenths / 10}.${tenths % 10} pawns."
         val best = baseline.bestMoveLan
-            ?.takeIf { it != moveLan && it.length >= 4 }
-            ?.let { "Best was ${it.take(2)} → ${it.substring(2, 4)}." }
+            ?.takeIf { it != moveLan }
+            ?.let { "Best was ${LanFormat.arrow(it)}." }
         return listOfNotNull(themed ?: cost, best).joinToString(" ")
     }
 

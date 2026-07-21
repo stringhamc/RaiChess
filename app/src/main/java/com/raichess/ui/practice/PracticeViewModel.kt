@@ -15,6 +15,7 @@ import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.PuzzleRepository
+import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.PracticeRating
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.DrillSelector
@@ -363,7 +364,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
      * the position back, so failing is part of the loop, not an ending).
      */
     private fun failPrompt(revealLan: String?): String {
-        val best = "Best was ${revealLan?.let { formatLan(it) }}"
+        val best = "Best was ${revealLan?.let { LanFormat.arrow(it) }}"
         val why = activeMistake?.let { ThemeTag.explain(it.themes) }
         return if (why != null) {
             "$best — your game move $why."
@@ -375,9 +376,6 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     private fun promptFor(side: Side) = "Find the best move for ${sideName(side)}"
 
     private fun sideName(side: Side) = if (side == Side.WHITE) "White" else "Black"
-
-    private fun formatLan(lan: String) =
-        if (lan.length >= 4) "${lan.substring(0, 2)} → ${lan.substring(2, 4)}" else lan
 
     companion object {
         private const val TAG = "PracticeViewModel"

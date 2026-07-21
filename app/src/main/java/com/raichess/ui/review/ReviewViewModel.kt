@@ -8,6 +8,7 @@ import com.raichess.data.database.AnalysisState
 import com.raichess.data.database.PositionEntity
 import com.raichess.data.repository.GameRepository
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.HintAdvisor
@@ -123,11 +124,11 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val tenths = (row.centipawnLoss ?: 0) / 10
         val why = ThemeTag.explain(ThemeTag.fromCsv(row.themes))
             ?.let { " Your move $it." } ?: ""
-        val bestText = row.bestMove?.let { "; best was ${formatLan(it)}" } ?: ""
+        val bestText = row.bestMove?.let { "; best was ${LanFormat.arrow(it)}" } ?: ""
         return ReviewMistakeUi(
             moveNumber = row.ply / 2 + 1,
             classificationLabel = "$kind — lost ${tenths / 10}.${tenths % 10} pawns",
-            detail = "You played ${formatLan(row.movePlayed)}$bestText.$why",
+            detail = "You played ${LanFormat.arrow(row.movePlayed)}$bestText.$why",
             squares = HintAdvisor.parseFenBoard(row.fen) ?: List(64) { null },
             playedMove = moveSquares(row.movePlayed),
             bestHighlights = row.bestMove?.let { lan ->
@@ -141,9 +142,6 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val to = HintAdvisor.squareOrdinal(lan.drop(2).take(2)) ?: return null
         return LastMove(from, to)
     }
-
-    private fun formatLan(lan: String) =
-        if (lan.length >= 4) "${lan.substring(0, 2)} → ${lan.substring(2, 4)}" else lan
 
     companion object {
         private const val TAG = "ReviewViewModel"
