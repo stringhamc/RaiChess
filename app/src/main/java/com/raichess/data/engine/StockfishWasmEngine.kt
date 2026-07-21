@@ -65,6 +65,14 @@ class StockfishWasmEngine(
     // Failed init attempts so far; a transient failure gets retried (see
     // ensureReady) before the engine gives up for good.
     private var initAttempts = 0
+    // Identifies which init attempt owns the async createWebView post. A
+    // WebView construction can stall for many seconds (provider updating)
+    // and outlive its attempt's timeout; when it finally lands during a
+    // retry, the stale generation tells it to destroy itself instead of
+    // leaking, overwriting the newer attempt's WebView, or feeding stale
+    // tokens into the shared output queue. Written only inside the
+    // synchronized ensureReady; read on the main thread.
+    @Volatile private var attemptGeneration = 0
 
     override val activeEngineLabel: String
         get() = when {
@@ -235,7 +243,9 @@ class StockfishWasmEngine(
         val readyBudget = if (retrying) HANDSHAKE_TIMEOUT_MS / 2 else HANDSHAKE_TIMEOUT_MS
 
         output.clear()
-        mainHandler.post { createWebView() }
+        attemptGeneration++
+        val generation = attemptGeneration
+        mainHandler.post { createWebView(generation) }
 
         // engine.html calls AndroidEngine.onReady() once the worker is created
         val ready = awaitToken(initBudget) { it == READY_SENTINEL || it == ERROR_SENTINEL }
@@ -275,6 +285,10 @@ class StockfishWasmEngine(
     private fun fail(reason: String): Boolean {
         Log.w(TAG, "Stockfish unavailable ($reason); using RaiEngine fallback")
         state = State.FAILED
+        // Invalidate this attempt's in-flight createWebView post right away:
+        // without the bump, a construction that outlived this timeout could
+        // still go live before any retry re-bumps the generation
+        attemptGeneration++
         // NOT `released = true`: released is close()'s permanent teardown
         // signal, and a failed attempt must stay retryable (see ensureReady)
         destroyWebView()
@@ -282,7 +296,11 @@ class StockfishWasmEngine(
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun createWebView() {
+    private fun createWebView(generation: Int) {
+        // Stale post: the attempt that queued this already timed out (or
+        // close() ran). Bail before doing any work — and never touch the
+        // shared output queue, which belongs to a newer attempt now.
+        if (released || generation != attemptGeneration) return
         // new WebView(...) can throw on devices where the WebView provider is
         // missing/updating/disabled. This runs on the main thread's loop, so
         // an uncaught throw here would crash the app rather than fall back —
@@ -319,18 +337,20 @@ class StockfishWasmEngine(
                     return host != ASSET_HOST
                 }
             }
-            // If teardown already happened while this post was queued, don't
-            // leave a live WebView behind — destroy it, unblock any waiter, bail.
-            if (released) {
+            // Construction itself can stall past the attempt's timeout. If
+            // this attempt was failed (or the engine closed) meanwhile, a
+            // retry may already own the queue: destroy quietly — no queue
+            // signal, no webView overwrite, no leak.
+            if (released || generation != attemptGeneration) {
                 view.destroy()
-                output.offer(ERROR_SENTINEL)
                 return
             }
             webView = view
             view.loadUrl("https://$ASSET_HOST/assets/stockfish/engine.html")
         } catch (e: Throwable) {
             Log.w(TAG, "WebView construction failed", e)
-            output.offer(ERROR_SENTINEL)
+            // Only the attempt that owns the queue may fail it
+            if (generation == attemptGeneration) output.offer(ERROR_SENTINEL)
         }
     }
 
