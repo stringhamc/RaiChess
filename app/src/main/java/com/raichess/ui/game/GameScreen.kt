@@ -61,6 +61,7 @@ fun GameScreen(
     onSquareTapped: (Int) -> Unit,
     onUndo: () -> Unit,
     onHint: () -> Unit,
+    onWhyTapped: () -> Unit,
     onResign: () -> Unit,
     onNewGame: () -> Unit
 ) {
@@ -100,22 +101,38 @@ fun GameScreen(
         // feature it never shows): a requested hint, else the live move
         // rating and win chances. Fixed-height slot so the board never
         // reflows when text appears or disappears.
-        if (state.gameMode == GameMode.TRAINING) Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(coachLineHeight),
-            contentAlignment = Alignment.Center
-        ) {
-            val coachText = state.hintText?.let { "Hint: $it" } ?: coachStatusLine(state)
-            if (coachText != null) {
-                Text(
-                    text = coachText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+        if (state.gameMode == GameMode.TRAINING) {
+            // A hint owns the line; otherwise the grade, tappable to swap
+            // in the explanation behind it ("Why?") and back
+            val whyTappable = state.hintText == null && state.lastMoveWhy != null
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(coachLineHeight)
+                    .then(
+                        if (whyTappable) Modifier.clickable(onClick = onWhyTapped)
+                        else Modifier
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                val coachText = state.hintText?.let { "Hint: $it" }
+                    ?: if (state.showWhy && state.lastMoveWhy != null) {
+                        state.lastMoveWhy
+                    } else {
+                        coachStatusLine(state)?.let { line ->
+                            if (whyTappable) "$line · Why?" else line
+                        }
+                    }
+                if (coachText != null) {
+                    Text(
+                        text = coachText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
 

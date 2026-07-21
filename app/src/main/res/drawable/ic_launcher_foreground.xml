@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- RaiChess launcher foreground: 来 in gray (IPA Gothic outline,
-     extracted via fontTools — vectors can't render text) over a 4x4
-     checkerboard, inside the adaptive-icon safe zone (66/108 centered).
-     The thin dark stroke separates the glyph from the light squares. -->
+     extracted via fontTools — vectors can't render text) over a 2x2
+     board (4 squares), inside the adaptive-icon safe zone (66/108
+     centered). The thin dark stroke separates the glyph from the light
+     squares. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -11,16 +12,16 @@
     <!-- Dark cells -->
     <path
         android:fillColor="#FF464646"
-        android:pathData="M41,28h13v13h-13z M67,28h13v13h-13z M28,41h13v13h-13z M54,41h13v13h-13z M41,54h13v13h-13z M67,54h13v13h-13z M28,67h13v13h-13z M54,67h13v13h-13z" />
+        android:pathData="M54,30h24v24h-24z M30,54h24v24h-24z" />
     <!-- Light cells -->
     <path
         android:fillColor="#FFF5F5F5"
-        android:pathData="M28,28h13v13h-13z M54,28h13v13h-13z M41,41h13v13h-13z M67,41h13v13h-13z M28,54h13v13h-13z M54,54h13v13h-13z M41,67h13v13h-13z M67,67h13v13h-13z" />
+        android:pathData="M30,30h24v24h-24z M54,54h24v24h-24z" />
     <path
         android:strokeColor="#FF464646"
         android:strokeWidth="1.5"
         android:fillColor="#00000000"
-        android:pathData="M28,28 h52 v52 h-52 z" />
+        android:pathData="M30,30 h48 v48 h-48 z" />
     <!-- 来 -->
     <path
         android:fillColor="#FF969696"
