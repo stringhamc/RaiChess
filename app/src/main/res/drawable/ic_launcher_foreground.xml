@@ -1,20 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RaiChess launcher foreground: white 2x2 checkerboard on transparent,
-     kept inside the adaptive-icon safe zone (66/108 centered) -->
+<!-- RaiChess launcher foreground: 来 in gray (IPA Gothic outline,
+     extracted via fontTools — vectors can't render text) over a 4x4
+     checkerboard, inside the adaptive-icon safe zone (66/108 centered).
+     The thin dark stroke separates the glyph from the light squares. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Dark cells -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M30,30 h24 v24 h-24 z" />
+        android:fillColor="#FF464646"
+        android:pathData="M41,28h13v13h-13z M67,28h13v13h-13z M28,41h13v13h-13z M54,41h13v13h-13z M41,54h13v13h-13z M67,54h13v13h-13z M28,67h13v13h-13z M54,67h13v13h-13z" />
+    <!-- Light cells -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,54 h24 v24 h-24 z" />
+        android:fillColor="#FFF5F5F5"
+        android:pathData="M28,28h13v13h-13z M54,28h13v13h-13z M41,41h13v13h-13z M67,41h13v13h-13z M28,54h13v13h-13z M54,54h13v13h-13z M41,67h13v13h-13z M67,67h13v13h-13z" />
     <path
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="3"
+        android:strokeColor="#FF464646"
+        android:strokeWidth="1.5"
         android:fillColor="#00000000"
-        android:pathData="M30,30 h48 v48 h-48 z" />
+        android:pathData="M28,28 h52 v52 h-52 z" />
+    <!-- 来 -->
+    <path
+        android:fillColor="#FF969696"
+        android:strokeColor="#FF141414"
+        android:strokeWidth="2.6"
+        android:pathData="M55.84,61.47 L55.84,83.0 L51.21,83.0 L51.21,61.91 Q43.16,73.65 28.27,80.17 L25.13,76.3 Q40.48,70.41 49.86,57.73 L26.42,57.73 L26.42,53.61 L51.21,53.61 L51.21,39.26 L29.69,39.26 L29.69,35.13 L51.21,35.13 L51.21,25.0 L55.84,25.0 L55.84,35.13 L77.84,35.13 L77.84,39.26 L55.84,39.26 L55.84,53.61 L61.32,53.61 Q64.84,47.06 67.14,39.95 L72.05,41.84 Q69.75,47.34 66.16,53.61 L81.14,53.61 L81.14,57.73 L57.38,57.73 Q67.14,68.74 82.87,74.63 L79.6,79.13 Q63.68,72.02 55.84,61.47 Z M40.01,52.98 Q37.75,46.4 34.91,41.96 L39.16,40.2 Q42.03,44.57 44.67,51.12 Z" />
 </vector>
