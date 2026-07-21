@@ -27,8 +27,23 @@ class PlayerProfileRepository(context: Context) {
             losses = prefs.getInt(KEY_LOSSES, 0),
             draws = prefs.getInt(KEY_DRAWS, 0),
             confidenceInterval = EloCalculator.getConfidenceInterval(gamesPlayed),
-            totalUndos = prefs.getInt(KEY_TOTAL_UNDOS, 0)
+            totalUndos = prefs.getInt(KEY_TOTAL_UNDOS, 0),
+            winStreak = prefs.getInt(KEY_WIN_STREAK, 0)
         )
+    }
+
+    /**
+     * The adaptive puzzle-solving rating (see PracticeRating), seeded
+     * from game ELO the first time practice runs.
+     */
+    fun getPracticeRating(): Int =
+        prefs.getInt(
+            KEY_PRACTICE_RATING,
+            prefs.getInt(KEY_ELO, EloCalculator.DEFAULT_STARTING_ELO)
+        )
+
+    fun setPracticeRating(rating: Int) {
+        prefs.edit().putInt(KEY_PRACTICE_RATING, rating).apply()
     }
 
     /** Lifetime count of Training-mode undos, a rough blunder-awareness signal. */
@@ -66,6 +81,7 @@ class PlayerProfileRepository(context: Context) {
             .putInt(KEY_WINS, updated.wins)
             .putInt(KEY_LOSSES, updated.losses)
             .putInt(KEY_DRAWS, updated.draws)
+            .putInt(KEY_WIN_STREAK, updated.winStreak)
             .apply()
 
         return updated to delta
@@ -80,5 +96,7 @@ class PlayerProfileRepository(context: Context) {
         private const val KEY_LOSSES = "losses"
         private const val KEY_DRAWS = "draws"
         private const val KEY_TOTAL_UNDOS = "total_undos"
+        private const val KEY_PRACTICE_RATING = "practice_rating"
+        private const val KEY_WIN_STREAK = "win_streak"
     }
 }

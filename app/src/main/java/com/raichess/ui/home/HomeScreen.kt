@@ -59,7 +59,8 @@ fun HomeScreen(
     onGameModeChanged: (GameMode) -> Unit,
     onAnimationsChanged: (Boolean) -> Unit,
     onStartGame: (randomColor: Boolean) -> Unit,
-    onPractice: () -> Unit = {}
+    onPractice: () -> Unit = {},
+    onReview: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -107,9 +108,15 @@ fun HomeScreen(
                 draws = stats.draws,
                 losses = stats.losses
             )
-            if (stats.totalUndos > 0) {
+            // Positive progress framing: personal best and streak, not a
+            // running tally of mistakes (undos stay tracked internally)
+            if (stats.gamesPlayed > 0) {
+                val progressBits = buildList {
+                    add("Peak ${stats.peakElo}")
+                    if (stats.winStreak >= 2) add("${stats.winStreak}-game win streak")
+                }
                 Text(
-                    text = "${stats.totalUndos} lifetime undos",
+                    text = progressBits.joinToString("  ·  "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(top = 8.dp)
@@ -234,6 +241,13 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Practice")
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        OutlinedButton(
+            onClick = onReview,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Review Last Game")
         }
 
         Spacer(modifier = Modifier.height(20.dp))

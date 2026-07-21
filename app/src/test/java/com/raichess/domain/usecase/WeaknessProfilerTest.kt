@@ -93,6 +93,30 @@ class WeaknessProfilerTest {
     }
 
     @Test
+    fun `drilling a mistake to mastery discounts its weight`() {
+        val undrilled = MistakeObservation(0, setOf(ThemeTag.HANGING_PIECE), 300)
+        val mastered = undrilled.copy(
+            timesDrilled = WeaknessProfiler.MASTERY_MIN_REPS,
+            drillSuccessRate = 1.0
+        )
+        val plain = WeaknessProfiler.build(listOf(undrilled)).weaknesses.single().score
+        val drilled = WeaknessProfiler.build(listOf(mastered)).weaknesses.single().score
+        assertEquals(1.0, plain, 1e-9)
+        assertEquals(1.0 - WeaknessProfiler.MASTERY_MAX_DISCOUNT, drilled, 1e-9)
+    }
+
+    @Test
+    fun `too few drill reps earn no discount`() {
+        val barelyDrilled = MistakeObservation(
+            0, setOf(ThemeTag.HANGING_PIECE), 300,
+            timesDrilled = WeaknessProfiler.MASTERY_MIN_REPS - 1,
+            drillSuccessRate = 1.0
+        )
+        val score = WeaknessProfiler.build(listOf(barelyDrilled)).weaknesses.single().score
+        assertEquals(1.0, score, 1e-9)
+    }
+
+    @Test
     fun `empty history yields an empty profile`() {
         val profile = WeaknessProfiler.build(emptyList())
         assertTrue(profile.weaknesses.isEmpty())

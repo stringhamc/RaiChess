@@ -123,4 +123,20 @@ class EloCalculatorTest {
         assertEquals(1216, afterLoss.peakElo)
         assertEquals(1, afterLoss.losses)
     }
+
+    @org.junit.Test
+    fun `win streak increments on wins, holds on draws, resets on losses`() {
+        val stats = EloStats(
+            currentElo = 1200, peakElo = 1200, gamesPlayed = 0,
+            wins = 0, losses = 0, draws = 0, confidenceInterval = 150
+        )
+        val two = stats
+            .withGameResult(1216, GameResult.WIN)
+            .withGameResult(1232, GameResult.WIN)
+        assertEquals(2, two.winStreak)
+        val held = two.withGameResult(1232, GameResult.DRAW)
+        assertEquals(2, held.winStreak)
+        val reset = held.withGameResult(1216, GameResult.LOSS)
+        assertEquals(0, reset.winStreak)
+    }
 }

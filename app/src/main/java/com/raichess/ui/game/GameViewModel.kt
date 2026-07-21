@@ -24,15 +24,18 @@ import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.MoveClassification
 import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.PgnBuilder
 import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.model.PositionAnalysis
+import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.UndoPenalty
 import com.raichess.domain.model.WinProbability
 import com.raichess.domain.model.canUndo
 import com.raichess.domain.usecase.HintAdvisor
+import com.raichess.domain.usecase.ThemeTagger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +94,10 @@ data class GameUiState(
     val isDeepHintRunning: Boolean = false,
     /** Live grade of the player's last move (Training; null until graded). */
     val lastMoveRating: MoveClassification? = null,
+    /** Explanation behind a graded inaccuracy/mistake/blunder, or null. */
+    val lastMoveWhy: String? = null,
+    /** True while the coach line shows [lastMoveWhy] instead of the grade. */
+    val showWhy: Boolean = false,
     /** Player's live winning chances 0–100 (Training; null until analyzed). */
     val winPercent: Int? = null,
     val moveHistorySan: List<String> = emptyList(),
@@ -98,7 +105,9 @@ data class GameUiState(
     val isAiThinking: Boolean = false,
     val isPlayerInCheck: Boolean = false,
     val ending: GameEnding? = null,
-    val eloDelta: Int? = null
+    val eloDelta: Int? = null,
+    /** True when this game's result set a strictly new peak ELO. */
+    val isNewPeak: Boolean = false
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -221,6 +230,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerInCheck = false,
             ending = null,
             eloDelta = null,
+            isNewPeak = false,
             undoCount = 0,
             canUndo = false,
             moveSeq = 0,
@@ -232,6 +242,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             coachWarning = false,
             isDeepHintRunning = false,
             lastMoveRating = null,
+            lastMoveWhy = null,
+            showWhy = false,
             winPercent = null
         )
 
@@ -478,6 +490,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             hintHighlights = emptySet(),
             coachWarning = false,
             lastMoveRating = null,
+            lastMoveWhy = null,
+            showWhy = false,
             winPercent = null
             // moveSeq deliberately not incremented: undo never animates
         )
@@ -542,10 +556,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             canHint = false
         )
 
+        // The player's move is already on the board/move list here
+        val playerPly = moveList.size - 1
         viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             var playerMoveLoss = 0
             var playerMoveRating: MoveClassification? = null
+            var playerMoveWhy: String? = null
             val move = withContext(Dispatchers.Default) {
                 // ChessEngine.selectMove is single-caller only (see its KDoc):
                 // never launch overlapping AI-move coroutines, or the engine's
@@ -567,6 +584,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                                 playedEngineBest = playerMoveLan != null &&
                                     playerMoveLan == baseline.bestMoveLan
                             )
+                            playerMoveWhy = buildMoveWhy(
+                                fenBefore = playerMoveBaselineFen,
+                                ply = playerPly,
+                                moveLan = playerMoveLan,
+                                baseline = baseline,
+                                afterMove = afterMove,
+                                lossCp = playerMoveLoss,
+                                rating = playerMoveRating
+                            )
                         }
                     }
                     currentEngine.selectMove(searchBoard)
@@ -587,7 +613,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             // move there is. finishGame has already settled winPercent to the
             // result and cleared the undo nudge (undo isn't available now).
             if (gameEnded && coaching && playerMoveRating != null) {
-                _uiState.value = _uiState.value.copy(lastMoveRating = playerMoveRating)
+                _uiState.value = _uiState.value.copy(
+                    lastMoveRating = playerMoveRating,
+                    lastMoveWhy = playerMoveWhy,
+                    showWhy = false
+                )
             }
             if (!gameEnded) {
                 val current = _uiState.value
@@ -609,6 +639,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     // so the rating is the single source of truth.
                     coachWarning = playerMoveRating == MoveClassification.BLUNDER,
                     lastMoveRating = playerMoveRating,
+                    lastMoveWhy = playerMoveWhy,
+                    showWhy = false,
                     canUndo = canUndo(
                         mode = current.gameMode,
                         isPlaying = true,
@@ -648,7 +680,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             hintText = null,
             hintHighlights = emptySet(),
             coachWarning = false,
-            lastMoveRating = null
+            lastMoveRating = null,
+            lastMoveWhy = null,
+            showWhy = false
         )
     }
 
@@ -674,6 +708,45 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Show/hide the explanation behind the last move's grade. */
+    fun toggleMoveWhy() {
+        val state = _uiState.value
+        if (state.lastMoveWhy == null) return
+        _uiState.value = state.copy(showWhy = !state.showWhy)
+    }
+
+    /**
+     * "Why?" text for a graded inaccuracy-or-worse: the tagged reason
+     * when a detector recognizes the mistake (live ThemeTagger pass —
+     * board geometry only, no extra engine call), else the eval cost,
+     * plus the engine's preferred move. Null for fine moves.
+     */
+    private fun buildMoveWhy(
+        fenBefore: String?,
+        ply: Int,
+        moveLan: String?,
+        baseline: PositionAnalysis,
+        afterMove: PositionAnalysis,
+        lossCp: Int,
+        rating: MoveClassification?
+    ): String? {
+        if (fenBefore == null || moveLan == null) return null
+        val graded = rating == MoveClassification.INACCURACY ||
+            rating == MoveClassification.MISTAKE ||
+            rating == MoveClassification.BLUNDER
+        if (!graded) return null
+        val themed = ThemeTag.explain(
+            ThemeTagger.tag(fenBefore, ply, moveLan, baseline, afterMove, lossCp)
+        )?.let { "Your move $it." }
+        // Integer tenths keep the decimal locale-proof
+        val tenths = lossCp / 10
+        val cost = "It cost about ${tenths / 10}.${tenths % 10} pawns."
+        val best = baseline.bestMoveLan
+            ?.takeIf { it != moveLan }
+            ?.let { "Best was ${LanFormat.arrow(it)}." }
+        return listOfNotNull(themed ?: cost, best).joinToString(" ")
+    }
+
     private fun finishGame(ending: GameEnding, result: GameResult) {
         if (gameRecorded) return
         gameRecorded = true
@@ -686,6 +759,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             UndoPenalty.NEUTRAL_ACCURACY
         }
+        // Peak comparison must use the pre-game stats: recordResult already
+        // folded this game into peakElo, so equality afterwards can't tell
+        // a fresh high from re-climbing to a previous one
+        val previousPeak = state.playerStats?.peakElo
         val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy)
         persistFinishedGame(state, result, eloAfter = stats.currentElo, eloDelta = delta)
         _uiState.value = state.copy(
@@ -695,6 +772,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerTurn = false,
             ending = ending,
             eloDelta = delta,
+            isNewPeak = previousPeak != null && stats.peakElo > previousPeak,
             canUndo = false,
             canHint = false,
             coachWarning = false,

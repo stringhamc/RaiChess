@@ -7,17 +7,27 @@ package com.raichess.domain.model
  * with recency decay, so interpretation can always be recomputed as the
  * taxonomy grows — add new tags, re-analyze, never migrate.
  */
-enum class ThemeTag(val id: String, val isPhase: Boolean = false) {
+enum class ThemeTag(
+    val id: String,
+    val isPhase: Boolean = false,
+    /** Player-facing "why it was a mistake", phrased to follow "Your move…". */
+    val explanation: String? = null
+) {
     /** The moved piece landed where it can be won (attacked and under-defended). */
-    HANGING_PIECE("hanging_piece"),
+    HANGING_PIECE("hanging_piece",
+        explanation = "left a piece where it could be taken for free"),
     /** The move let the opponent's best reply win significant material elsewhere. */
-    ALLOWED_TACTIC("allowed_tactic"),
+    ALLOWED_TACTIC("allowed_tactic",
+        explanation = "allowed a tactic that wins material"),
     /** The move gave the opponent a forced mate. */
-    ALLOWED_MATE("allowed_mate"),
+    ALLOWED_MATE("allowed_mate",
+        explanation = "gave the opponent a forced mate"),
     /** A forced mate was available and not played. */
-    MISSED_MATE("missed_mate"),
+    MISSED_MATE("missed_mate",
+        explanation = "missed a forced mate"),
     /** The engine's best move won significant material and wasn't played. */
-    MISSED_CAPTURE("missed_capture"),
+    MISSED_CAPTURE("missed_capture",
+        explanation = "missed a winning capture"),
     /**
      * Game phase at the moment of the mistake. Phase tags attach to *every*
      * graded mistake (exactly one per observation), unlike the substantive
@@ -39,5 +49,17 @@ enum class ThemeTag(val id: String, val isPhase: Boolean = false) {
             csv.split(',')
                 .mapNotNull { byId[it.trim()] }
                 .toSet()
+
+        /** Mates outrank material — they're the decisive lesson. */
+        private val explainPriority = listOf(
+            ALLOWED_MATE, MISSED_MATE, HANGING_PIECE, MISSED_CAPTURE, ALLOWED_TACTIC
+        )
+
+        /**
+         * The most teachable explanation among [themes], or null when
+         * only phase tags are present.
+         */
+        fun explain(themes: Set<ThemeTag>): String? =
+            explainPriority.firstOrNull { it in themes }?.explanation
     }
 }

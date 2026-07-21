@@ -15,9 +15,13 @@ import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.PuzzleRepository
+import com.raichess.domain.model.LanFormat
+import com.raichess.domain.model.PracticeRating
+import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.DrillSelector
 import com.raichess.domain.usecase.GameAnalyzer
 import com.raichess.domain.usecase.PuzzleDrill
+import com.raichess.domain.usecase.WeaknessProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,7 +50,11 @@ data class PracticeUiState(
     /** Squares to flash on reveal (the expected move). */
     val revealHighlights: Set<Int> = emptySet(),
     val solvedCount: Int = 0,
-    val attemptedCount: Int = 0
+    val attemptedCount: Int = 0,
+    /** Consecutive solves this session, for streak encouragement. */
+    val solvedStreak: Int = 0,
+    /** Adaptive puzzle-solving rating (null until first load). */
+    val practiceRating: Int? = null
 )
 
 /**
@@ -104,17 +112,18 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 Log.w(TAG, "drill progress unavailable", e)
                 emptyMap()
             }
-            val weaknesses = try {
-                gameRepository.weaknessProfile().weaknesses.map { it.theme }
+            val profile = try {
+                gameRepository.weaknessProfile()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "weakness profile unavailable", e)
-                emptyList()
+                WeaknessProfile.EMPTY
             }
             // A newer loadQueue cancelled this job while it was suspended
             // above: bail before touching queue state
             ensureActive()
+            val targetRating = profileRepository.getPracticeRating()
             // Off the main thread: the sort is trivial for the seed set but
             // the fetch script can grow the asset to thousands of puzzles
             queue = withContext(Dispatchers.Default) {
@@ -123,13 +132,18 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                     mistakes = mistakes,
                     puzzles = puzzles,
                     progressById = progress,
-                    playerElo = profileRepository.getStats().currentElo,
-                    weaknesses = weaknesses,
-                    nowMs = System.currentTimeMillis()
+                    targetRating = targetRating,
+                    weaknesses = profile.weaknesses.map { it.theme },
+                    nowMs = System.currentTimeMillis(),
+                    weakPhases = profile.phases.map { it.theme }
                 )
             }
             queueIndex = 0
-            _uiState.value = _uiState.value.copy(loading = false, queueEmpty = queue.isEmpty())
+            _uiState.value = _uiState.value.copy(
+                loading = false,
+                queueEmpty = queue.isEmpty(),
+                practiceRating = targetRating
+            )
             if (queue.isNotEmpty()) startDrill(queue[0])
         }
     }
@@ -294,23 +308,35 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 Log.w(TAG, "failed to record drill result", e)
             }
         }
+        // Rated puzzles move the adaptive practice rating; own-mistake
+        // drills have no rating to grade against
+        val newRating = activePuzzle?.puzzle?.rating?.let { puzzleRating ->
+            PracticeRating.updated(
+                current = profileRepository.getPracticeRating(),
+                puzzleRating = puzzleRating,
+                solved = solved
+            ).also { profileRepository.setPracticeRating(it) }
+        }
         val reveal = revealLan
             ?.let { GameAnalyzer.lanToLegalMove(board, it) }
             ?.let { setOf(it.from.ordinal, it.to.ordinal) }
             ?: emptySet()
+        val streak = if (solved) state.solvedStreak + 1 else 0
         _uiState.value = state.copy(
             squares = boardSnapshot(),
             phase = if (solved) DrillPhase.SOLVED else DrillPhase.FAILED,
             prompt = if (solved) {
-                "Solved!"
+                if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
             } else {
-                "Not quite — best was ${revealLan?.let { formatLan(it) }}."
+                failPrompt(revealLan)
             },
             selectedSquare = null,
             legalTargets = emptySet(),
             revealHighlights = reveal,
             solvedCount = state.solvedCount + if (solved) 1 else 0,
-            attemptedCount = state.attemptedCount + 1
+            attemptedCount = state.attemptedCount + 1,
+            solvedStreak = streak,
+            practiceRating = newRating ?: state.practiceRating
         )
     }
 
@@ -332,12 +358,24 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         return if (piece.pieceSide == Side.WHITE) char.uppercaseChar() else char
     }
 
+    /**
+     * Failed-drill reveal: the answer, plus — for own-mistake drills —
+     * why the original move was a mistake (spaced repetition will bring
+     * the position back, so failing is part of the loop, not an ending).
+     */
+    private fun failPrompt(revealLan: String?): String {
+        val best = "Best was ${revealLan?.let { LanFormat.arrow(it) }}"
+        val why = activeMistake?.let { ThemeTag.explain(it.themes) }
+        return if (why != null) {
+            "$best — your game move $why."
+        } else {
+            "$best. It'll come back around."
+        }
+    }
+
     private fun promptFor(side: Side) = "Find the best move for ${sideName(side)}"
 
     private fun sideName(side: Side) = if (side == Side.WHITE) "White" else "Black"
-
-    private fun formatLan(lan: String) =
-        if (lan.length >= 4) "${lan.substring(0, 2)} → ${lan.substring(2, 4)}" else lan
 
     companion object {
         private const val TAG = "PracticeViewModel"

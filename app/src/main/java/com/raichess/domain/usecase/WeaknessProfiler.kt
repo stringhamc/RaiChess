@@ -10,7 +10,11 @@ import kotlin.math.pow
 data class MistakeObservation(
     val gamesAgo: Int,
     val themes: Set<ThemeTag>,
-    val lossCp: Int
+    val lossCp: Int,
+    /** Times this exact position was drilled in Practice. */
+    val timesDrilled: Int = 0,
+    /** Success rate of those drills, 0..1. */
+    val drillSuccessRate: Double = 0.0
 )
 
 /** Aggregated standing of one theme in the player's current profile. */
@@ -59,13 +63,31 @@ object WeaknessProfiler {
     /** Games for an observation's weight to halve. */
     const val HALF_LIFE_GAMES = 20.0
 
+    /** Drill reps before mastery starts discounting an observation. */
+    const val MASTERY_MIN_REPS = 2
+
+    /**
+     * Cap on the mastery discount: a fully-mastered drill still leaves
+     * 40% of the observation's weight, because solving a position you've
+     * seen isn't the same as not making the mistake in a live game.
+     */
+    const val MASTERY_MAX_DISCOUNT = 0.6
+
     /** Themes never observed are absent from both lists. */
     fun build(observations: List<MistakeObservation>): WeaknessProfile {
         data class Acc(var score: Double = 0.0, var count: Int = 0, var lossSum: Long = 0)
 
         val byTheme = HashMap<ThemeTag, Acc>()
         for (obs in observations) {
-            val weight = 0.5.pow(obs.gamesAgo / HALF_LIFE_GAMES)
+            // Practicing a mistake to mastery closes the loop: drilled
+            // observations count less, so the profile reflects what the
+            // player has actually worked on, not just what they once did
+            val mastery = if (obs.timesDrilled >= MASTERY_MIN_REPS) {
+                MASTERY_MAX_DISCOUNT * obs.drillSuccessRate.coerceIn(0.0, 1.0)
+            } else {
+                0.0
+            }
+            val weight = 0.5.pow(obs.gamesAgo / HALF_LIFE_GAMES) * (1.0 - mastery)
             for (theme in obs.themes) {
                 val acc = byTheme.getOrPut(theme) { Acc() }
                 acc.score += weight

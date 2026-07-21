@@ -3,6 +3,7 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.PracticePosition
 import com.raichess.domain.model.Puzzle
 import com.raichess.domain.model.ThemeTag
+import kotlin.random.Random
 
 /**
  * Pure queue-building policy for the practice screen (Phase D of the
@@ -11,8 +12,11 @@ import com.raichess.domain.model.ThemeTag
  * Two sources, mixable:
  *  - the player's own analyzed mistakes (spaced repetition: overdue and
  *    never-practiced first)
- *  - Lichess-format puzzles (near the player's rating, weakness-matched
- *    themes first, unattempted before repeats)
+ *  - Lichess-format puzzles: SELECTED near the target rating (the
+ *    adaptive practice rating, see PracticeRating), due and
+ *    weakness-matched first with a seeded shuffle so equal candidates
+ *    rotate between sessions; then ORDERED as a session ramp — easiest
+ *    to hardest, same-motif puzzles spaced apart
  *
  * Never persisted — recomputed per session from stored observations, the
  * same recompute-don't-migrate principle as WeaknessProfiler.
@@ -60,6 +64,16 @@ object DrillSelector {
         ThemeTag.ALLOWED_TACTIC to setOf("fork", "pin", "skewer", "discoveredAttack")
     )
 
+    /** Lichess themes matching each game-phase tag. */
+    val PHASE_TO_LICHESS_THEMES: Map<ThemeTag, Set<String>> = mapOf(
+        ThemeTag.OPENING to setOf("opening"),
+        ThemeTag.MIDDLEGAME to setOf("middlegame"),
+        ThemeTag.ENDGAME to setOf(
+            "endgame", "rookEndgame", "pawnEndgame",
+            "knightEndgame", "bishopEndgame", "queenEndgame"
+        )
+    )
+
     /**
      * True when a stored progress row says this drill is due for review:
      * never practiced, or past its doubling interval (halved again while
@@ -80,23 +94,29 @@ object DrillSelector {
      * @param puzzles the loaded puzzle set
      * @param progressById stored practice progress keyed by drill id
      *   (mistake ids and "puzzle:<id>" for puzzles)
-     * @param playerElo for puzzle difficulty filtering
+     * @param targetRating center of the puzzle difficulty window — the
+     *   player's practice rating, which adapts to drill results
      * @param weaknesses the player's worst themes, worst first
+     * @param weakPhases game phases ranked by mistake frequency, worst
+     *   first; only the top phase influences selection
+     * @param nowMs drives due-ness and seeds the session shuffle
      */
     fun buildQueue(
         source: Source,
         mistakes: List<MistakeDrill>,
         puzzles: List<Puzzle>,
         progressById: Map<String, PracticePosition>,
-        playerElo: Int,
+        targetRating: Int,
         weaknesses: List<ThemeTag>,
         nowMs: Long,
-        limit: Int = 20
+        limit: Int = 20,
+        weakPhases: List<ThemeTag> = emptyList()
     ): List<Drill> {
         val mistakeQueue = orderMistakes(mistakes, progressById, nowMs)
             .map { Drill(mistake = it) }
-        val puzzleQueue = orderPuzzles(puzzles, progressById, playerElo, weaknesses, nowMs)
-            .map { Drill(puzzle = it) }
+        val puzzleQueue =
+            orderPuzzles(puzzles, progressById, targetRating, weaknesses, weakPhases, nowMs, limit)
+                .map { Drill(puzzle = it) }
         val queue = when (source) {
             Source.MISTAKES -> mistakeQueue
             Source.PUZZLES -> puzzleQueue
@@ -114,30 +134,66 @@ object DrillSelector {
         mistakes.sortedByDescending { isDue(progress[it.id], nowMs) }
 
     /**
-     * Rating-window filter, then: due before not-due, weakness-matched
-     * themes before unmatched, closest rating first.
+     * Two phases. SELECT which puzzles make the session: rating-window
+     * filter, then due before not-due and weakness-matched before
+     * unmatched, with a seeded shuffle underneath so equal candidates
+     * rotate between sessions instead of repeating the same queue.
+     * ORDER the session as a ramp: easiest first, hardest last (due
+     * drills ahead of not-due filler), same-motif puzzles spaced apart.
      */
     private fun orderPuzzles(
         puzzles: List<Puzzle>,
         progress: Map<String, PracticePosition>,
-        playerElo: Int,
+        targetRating: Int,
         weaknesses: List<ThemeTag>,
-        nowMs: Long
+        weakPhases: List<ThemeTag>,
+        nowMs: Long,
+        limit: Int
     ): List<Puzzle> {
         val targetThemes = weaknesses
             .flatMap { WEAKNESS_TO_LICHESS_THEMES[it] ?: emptySet() }
             .toSet()
+        // A player whose mistakes cluster in one phase gets that phase's
+        // puzzles preferred (below weakness match — the what beats the when)
+        val phaseThemes = weakPhases.firstOrNull()
+            ?.let { PHASE_TO_LICHESS_THEMES[it] }
+            ?: emptySet()
         // A small bundled set may have nothing inside the window; drilling
         // off-level puzzles beats an empty queue
         val inWindow = puzzles
-            .filter { kotlin.math.abs(it.rating - playerElo) <= RATING_WINDOW }
+            .filter { kotlin.math.abs(it.rating - targetRating) <= RATING_WINDOW }
             .ifEmpty { puzzles }
-        return inWindow
+        // Stable sorts preserve the shuffle among equal-priority puzzles
+        val selected = inWindow
+            .shuffled(Random(nowMs))
             .sortedWith(
                 compareByDescending<Puzzle> { isDue(progress["puzzle:${it.id}"], nowMs) }
                     .thenByDescending { it.themes.any { t -> t in targetThemes } }
-                    .thenBy { kotlin.math.abs(it.rating - playerElo) }
+                    .thenByDescending { it.themes.any { t -> t in phaseThemes } }
             )
+            .take(limit)
+        val (due, notDue) = selected.partition { isDue(progress["puzzle:${it.id}"], nowMs) }
+        return spaceOutThemes(due.sortedBy { it.rating }) +
+            spaceOutThemes(notDue.sortedBy { it.rating })
+    }
+
+    /**
+     * Break up runs of identically-themed puzzles: keep input order but
+     * pull the next differently-themed puzzle forward when two in a row
+     * share a motif, so the session doesn't feel like the same trick
+     * with slightly different furniture.
+     */
+    private fun spaceOutThemes(puzzles: List<Puzzle>): List<Puzzle> {
+        val remaining = puzzles.toMutableList()
+        val out = ArrayList<Puzzle>(puzzles.size)
+        var lastThemes: Set<String>? = null
+        while (remaining.isNotEmpty()) {
+            val idx = remaining.indexOfFirst { it.themes != lastThemes }
+            val pick = remaining.removeAt(if (idx >= 0) idx else 0)
+            out.add(pick)
+            lastThemes = pick.themes
+        }
+        return out
     }
 
     private fun interleave(a: List<Drill>, b: List<Drill>): List<Drill> {
