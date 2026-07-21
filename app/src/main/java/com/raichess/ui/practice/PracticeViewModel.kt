@@ -15,6 +15,7 @@ import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.PuzzleRepository
+import com.raichess.domain.model.PracticeRating
 import com.raichess.domain.usecase.DrillSelector
 import com.raichess.domain.usecase.GameAnalyzer
 import com.raichess.domain.usecase.PuzzleDrill
@@ -46,7 +47,9 @@ data class PracticeUiState(
     /** Squares to flash on reveal (the expected move). */
     val revealHighlights: Set<Int> = emptySet(),
     val solvedCount: Int = 0,
-    val attemptedCount: Int = 0
+    val attemptedCount: Int = 0,
+    /** Adaptive puzzle-solving rating (null until first load). */
+    val practiceRating: Int? = null
 )
 
 /**
@@ -115,6 +118,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             // A newer loadQueue cancelled this job while it was suspended
             // above: bail before touching queue state
             ensureActive()
+            val targetRating = profileRepository.getPracticeRating()
             // Off the main thread: the sort is trivial for the seed set but
             // the fetch script can grow the asset to thousands of puzzles
             queue = withContext(Dispatchers.Default) {
@@ -123,13 +127,17 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                     mistakes = mistakes,
                     puzzles = puzzles,
                     progressById = progress,
-                    playerElo = profileRepository.getStats().currentElo,
+                    targetRating = targetRating,
                     weaknesses = weaknesses,
                     nowMs = System.currentTimeMillis()
                 )
             }
             queueIndex = 0
-            _uiState.value = _uiState.value.copy(loading = false, queueEmpty = queue.isEmpty())
+            _uiState.value = _uiState.value.copy(
+                loading = false,
+                queueEmpty = queue.isEmpty(),
+                practiceRating = targetRating
+            )
             if (queue.isNotEmpty()) startDrill(queue[0])
         }
     }
@@ -294,6 +302,15 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 Log.w(TAG, "failed to record drill result", e)
             }
         }
+        // Rated puzzles move the adaptive practice rating; own-mistake
+        // drills have no rating to grade against
+        val newRating = activePuzzle?.puzzle?.rating?.let { puzzleRating ->
+            PracticeRating.updated(
+                current = profileRepository.getPracticeRating(),
+                puzzleRating = puzzleRating,
+                solved = solved
+            ).also { profileRepository.setPracticeRating(it) }
+        }
         val reveal = revealLan
             ?.let { GameAnalyzer.lanToLegalMove(board, it) }
             ?.let { setOf(it.from.ordinal, it.to.ordinal) }
@@ -310,7 +327,8 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             legalTargets = emptySet(),
             revealHighlights = reveal,
             solvedCount = state.solvedCount + if (solved) 1 else 0,
-            attemptedCount = state.attemptedCount + 1
+            attemptedCount = state.attemptedCount + 1,
+            practiceRating = newRating ?: state.practiceRating
         )
     }
 

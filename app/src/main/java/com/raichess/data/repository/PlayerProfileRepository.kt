@@ -31,6 +31,20 @@ class PlayerProfileRepository(context: Context) {
         )
     }
 
+    /**
+     * The adaptive puzzle-solving rating (see PracticeRating), seeded
+     * from game ELO the first time practice runs.
+     */
+    fun getPracticeRating(): Int =
+        prefs.getInt(
+            KEY_PRACTICE_RATING,
+            prefs.getInt(KEY_ELO, EloCalculator.DEFAULT_STARTING_ELO)
+        )
+
+    fun setPracticeRating(rating: Int) {
+        prefs.edit().putInt(KEY_PRACTICE_RATING, rating).apply()
+    }
+
     /** Lifetime count of Training-mode undos, a rough blunder-awareness signal. */
     fun incrementLifetimeUndos() {
         prefs.edit()
@@ -80,5 +94,6 @@ class PlayerProfileRepository(context: Context) {
         private const val KEY_LOSSES = "losses"
         private const val KEY_DRAWS = "draws"
         private const val KEY_TOTAL_UNDOS = "total_undos"
+        private const val KEY_PRACTICE_RATING = "practice_rating"
     }
 }

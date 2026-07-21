@@ -22,6 +22,7 @@ import argparse
 import csv
 import io
 import os
+import random
 import sys
 import urllib.request
 
@@ -34,10 +35,17 @@ DEFAULT_OUT = os.path.join(
     "puzzles", "puzzles.csv"
 )
 
-# Themes DrillSelector maps player weaknesses onto, plus general staples.
+# Themes DrillSelector maps player weaknesses onto, plus a broad spread of
+# tactical and endgame motifs — variety in the pool is what lets the app's
+# theme-spacing keep sessions from feeling repetitive.
 THEMES = [
     "hangingPiece", "fork", "pin", "skewer", "discoveredAttack",
-    "mateIn1", "mateIn2", "backRankMate", "promotion", "endgame",
+    "mateIn1", "mateIn2", "mateIn3", "backRankMate", "smotheredMate",
+    "promotion", "advancedPawn", "endgame", "rookEndgame", "pawnEndgame",
+    "knightEndgame", "bishopEndgame", "queenEndgame",
+    "deflection", "attraction", "sacrifice", "clearance", "doubleCheck",
+    "trappedPiece", "xRayAttack", "zugzwang", "quietMove", "defensiveMove",
+    "intermezzo", "exposedKing", "kingsideAttack", "capturingDefender",
 ]
 BANDS = [(lo, lo + 200) for lo in range(400, 2600, 200)]
 HEADER = ["PuzzleId", "FEN", "Moves", "Rating", "RatingDeviation",
@@ -86,6 +94,13 @@ def main():
                             bucket.append(row)
                 break
 
+    # Surface starved buckets: an empty band × theme means players at that
+    # level get no material for that motif
+    for b, (lo, hi) in enumerate(BANDS):
+        thin = [t for t in THEMES if len(buckets.get((b, t), [])) < 10]
+        if thin:
+            print(f"  note: band {lo}-{hi} thin (<10) for: {', '.join(thin)}")
+
     seen = set()
     out_rows = []
     for bucket in buckets.values():
@@ -94,7 +109,10 @@ def main():
             if pid not in seen:
                 seen.add(pid)
                 out_rows.append([row[idx[h]] if h in idx else "" for h in HEADER])
-    out_rows.sort(key=lambda r: int(r[3]))
+    # Deterministic shuffle within equal ratings so file order doesn't
+    # cluster same-theme puzzles (the dump groups them)
+    rng = random.Random(0)
+    out_rows.sort(key=lambda r: (int(r[3]), rng.random()))
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w", newline="", encoding="utf-8") as f:

@@ -128,8 +128,11 @@ fun PracticeScreen(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
+                // Practice rating rises with solves, so progress is visible
+                // and the difficulty window follows demonstrated skill
+                val ratingSuffix = state.practiceRating?.let { " · Puzzle rating $it" } ?: ""
                 Text(
-                    text = "Solved ${state.solvedCount} of ${state.attemptedCount}",
+                    text = "Solved ${state.solvedCount} of ${state.attemptedCount}$ratingSuffix",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )

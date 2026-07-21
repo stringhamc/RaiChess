@@ -45,13 +45,13 @@ class DrillSelectorTest {
     }
 
     @Test
-    fun `puzzles filter to the player's rating window`() {
+    fun `puzzles filter to the target rating window`() {
         val queue = DrillSelector.buildQueue(
             source = DrillSelector.Source.PUZZLES,
             mistakes = emptyList(),
             puzzles = listOf(puzzle("far", 2400), puzzle("near", 900)),
             progressById = emptyMap(),
-            playerElo = 800,
+            targetRating = 800,
             weaknesses = emptyList(),
             nowMs = now
         )
@@ -59,7 +59,7 @@ class DrillSelectorTest {
     }
 
     @Test
-    fun `weakness-matched themes outrank rating proximity`() {
+    fun `weakness-matched puzzles win selection when the queue is full`() {
         val queue = DrillSelector.buildQueue(
             source = DrillSelector.Source.PUZZLES,
             mistakes = emptyList(),
@@ -68,11 +68,12 @@ class DrillSelectorTest {
                 puzzle("themed", 950, "hangingPiece")
             ),
             progressById = emptyMap(),
-            playerElo = 800,
+            targetRating = 800,
             weaknesses = listOf(ThemeTag.HANGING_PIECE),
-            nowMs = now
+            nowMs = now,
+            limit = 1
         )
-        assertEquals("themed", queue.first().puzzle!!.id)
+        assertEquals(listOf("themed"), queue.map { it.puzzle!!.id })
     }
 
     @Test
@@ -84,7 +85,7 @@ class DrillSelectorTest {
             progressById = mapOf(
                 "puzzle:drilled" to progress("puzzle:drilled", 3, 1.0, lastMs = now - day)
             ),
-            playerElo = 800,
+            targetRating = 800,
             weaknesses = emptyList(),
             nowMs = now
         )
@@ -98,11 +99,69 @@ class DrillSelectorTest {
             mistakes = emptyList(),
             puzzles = listOf(puzzle("only", 2400)),
             progressById = emptyMap(),
-            playerElo = 600,
+            targetRating = 600,
             weaknesses = emptyList(),
             nowMs = now
         )
         assertEquals(1, queue.size)
+    }
+
+    @Test
+    fun `puzzle sessions ramp from easier to harder`() {
+        val queue = DrillSelector.buildQueue(
+            source = DrillSelector.Source.PUZZLES,
+            mistakes = emptyList(),
+            puzzles = listOf(
+                puzzle("hard", 950, "fork"),
+                puzzle("easy", 700, "pin"),
+                puzzle("mid", 800, "mateIn1")
+            ),
+            progressById = emptyMap(),
+            targetRating = 800,
+            weaknesses = emptyList(),
+            nowMs = now
+        )
+        assertEquals(listOf("easy", "mid", "hard"), queue.map { it.puzzle!!.id })
+    }
+
+    @Test
+    fun `same-motif puzzles are spaced apart`() {
+        val queue = DrillSelector.buildQueue(
+            source = DrillSelector.Source.PUZZLES,
+            mistakes = emptyList(),
+            puzzles = listOf(
+                puzzle("f1", 800, "fork"), puzzle("f2", 810, "fork"),
+                puzzle("p1", 820, "pin"), puzzle("p2", 830, "pin")
+            ),
+            progressById = emptyMap(),
+            targetRating = 800,
+            weaknesses = emptyList(),
+            nowMs = now
+        ).map { it.puzzle!! }
+        assertEquals(4, queue.size)
+        for (i in 1 until queue.size) {
+            assertTrue(
+                "repeat motif at $i: ${queue.map { it.id }}",
+                queue[i].themes != queue[i - 1].themes
+            )
+        }
+    }
+
+    @Test
+    fun `equal-priority queues are seed-stable but vary between sessions`() {
+        val puzzles = ('a'..'h').map { puzzle("$it", 800, "theme-$it") }
+        fun queueAt(seedMs: Long) = DrillSelector.buildQueue(
+            source = DrillSelector.Source.PUZZLES,
+            mistakes = emptyList(),
+            puzzles = puzzles,
+            progressById = emptyMap(),
+            targetRating = 800,
+            weaknesses = emptyList(),
+            nowMs = seedMs
+        ).map { it.puzzle!!.id }
+        assertEquals(queueAt(now), queueAt(now))
+        // 8 equal-rating puzzles: some nearby seed must produce a new order
+        assertTrue((1L..5L).any { queueAt(now + it) != queueAt(now) })
     }
 
     @Test
@@ -112,7 +171,7 @@ class DrillSelectorTest {
             mistakes = listOf(mistake("mistake:1:1"), mistake("mistake:1:5")),
             puzzles = listOf(puzzle("p1", 800), puzzle("p2", 820)),
             progressById = emptyMap(),
-            playerElo = 800,
+            targetRating = 800,
             weaknesses = emptyList(),
             nowMs = now
         )
@@ -130,7 +189,7 @@ class DrillSelectorTest {
             mistakes = (1..30).map { mistake("mistake:1:$it") },
             puzzles = emptyList(),
             progressById = emptyMap(),
-            playerElo = 800,
+            targetRating = 800,
             weaknesses = emptyList(),
             nowMs = now,
             limit = 20
