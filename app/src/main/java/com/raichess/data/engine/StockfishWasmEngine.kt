@@ -226,6 +226,7 @@ class StockfishWasmEngine(
         val retrying = initAttempts > 1
         val initBudget = if (retrying) INIT_TIMEOUT_MS / 2 else INIT_TIMEOUT_MS
         val uciokBudget = if (retrying) UCIOK_TIMEOUT_MS / 2 else UCIOK_TIMEOUT_MS
+        val readyBudget = if (retrying) HANDSHAKE_TIMEOUT_MS / 2 else HANDSHAKE_TIMEOUT_MS
 
         output.clear()
         mainHandler.post { createWebView() }
@@ -234,7 +235,7 @@ class StockfishWasmEngine(
         val ready = awaitToken(initBudget) { it == READY_SENTINEL || it == ERROR_SENTINEL }
         if (ready != READY_SENTINEL) return fail("worker did not start within ${initBudget}ms")
 
-        if (!handshake(uciokBudget)) return fail("uci handshake failed")
+        if (!handshake(uciokBudget, readyBudget)) return fail("uci handshake failed")
 
         // Apply strength for this ELO. The bundled SF10 build only supports
         // `Skill Level` (UCI_Elo/UCI_LimitStrength came in SF11), so
@@ -246,23 +247,23 @@ class StockfishWasmEngine(
         }
         send("setoption name Threads value 1")
         send("setoption name Hash value 16")
-        if (!isReady()) return fail("engine not ready after options")
+        if (!isReady(readyBudget)) return fail("engine not ready after options")
 
         Log.i(TAG, "Stockfish WASM ready (targetElo band, movetime=${moveTimeMs}ms)")
         state = State.READY
         return true
     }
 
-    private fun handshake(uciokBudgetMs: Long): Boolean {
+    private fun handshake(uciokBudgetMs: Long, readyBudgetMs: Long): Boolean {
         send("uci")
         // uciok arrives only after the cold WASM compile — allow for that.
         if (awaitToken(uciokBudgetMs) { it == "uciok" } == null) return false
-        return isReady()
+        return isReady(readyBudgetMs)
     }
 
-    private fun isReady(): Boolean {
+    private fun isReady(budgetMs: Long = HANDSHAKE_TIMEOUT_MS): Boolean {
         send("isready")
-        return awaitToken(HANDSHAKE_TIMEOUT_MS) { it == "readyok" } != null
+        return awaitToken(budgetMs) { it == "readyok" } != null
     }
 
     private fun fail(reason: String): Boolean {

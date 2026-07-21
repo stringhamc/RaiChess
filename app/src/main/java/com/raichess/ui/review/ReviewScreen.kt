@@ -116,7 +116,9 @@ fun ReviewScreen(
                         played = mistake.playedMove,
                         best = mistake.bestMove,
                         flipped = !state.playerIsWhite,
-                        modifier = Modifier.matchParentSize()
+                        // Same 2dp inset as ChessBoard's border/padding, so
+                        // cell centers line up with the real squares
+                        modifier = Modifier.matchParentSize().padding(2.dp)
                     )
                 }
 
