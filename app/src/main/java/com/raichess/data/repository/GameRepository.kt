@@ -22,6 +22,7 @@ import com.raichess.domain.usecase.WeaknessProfiler
 class GameRepository(context: Context) {
 
     private val dao = RaiChessDatabase.get(context).gameDao()
+    private val practiceDao = RaiChessDatabase.get(context).practiceDao()
 
     /** Persist a finished game; returns its row id for the analysis pass. */
     suspend fun saveCompletedGame(game: CompletedGame): Long =
@@ -103,11 +104,17 @@ class GameRepository(context: Context) {
         val rows = dao.recentPlayerMistakes(MoveClassifier.MISTAKE_THRESHOLD_CP, maxObservations)
         val gameRank = rows.map { it.gameId }.distinct()
             .withIndex().associate { (rank, id) -> id to rank }
+        // Drill progress closes the loop: mistakes the player has since
+        // practiced to mastery weigh less (see WeaknessProfiler's discount)
+        val progressById = practiceDao.getAll().associateBy { it.id }
         val observations = rows.map { row ->
+            val drilled = progressById["mistake:${row.gameId}:${row.ply}"]
             MistakeObservation(
                 gamesAgo = gameRank.getValue(row.gameId),
                 themes = ThemeTag.fromCsv(row.themes),
-                lossCp = row.centipawnLoss
+                lossCp = row.centipawnLoss,
+                timesDrilled = drilled?.timesPracticed ?: 0,
+                drillSuccessRate = drilled?.successRate ?: 0.0
             )
         }
         return WeaknessProfiler.build(observations)

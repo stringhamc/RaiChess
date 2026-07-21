@@ -21,6 +21,8 @@ import com.raichess.ui.game.GameViewModel
 import com.raichess.ui.home.HomeScreen
 import com.raichess.ui.practice.PracticeScreen
 import com.raichess.ui.practice.PracticeViewModel
+import com.raichess.ui.review.ReviewScreen
+import com.raichess.ui.review.ReviewViewModel
 import com.raichess.ui.theme.RaiChessTheme
 
 /**
@@ -52,6 +54,19 @@ class MainActivity : ComponentActivity() {
 fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     var showPractice by rememberSaveable { mutableStateOf(false) }
+    var showReview by rememberSaveable { mutableStateOf(false) }
+
+    if (showReview) {
+        val reviewViewModel: ReviewViewModel = viewModel()
+        val reviewState by reviewViewModel.uiState.collectAsState()
+        ReviewScreen(
+            state = reviewState,
+            onPrevious = reviewViewModel::previous,
+            onNext = reviewViewModel::next,
+            onBack = { showReview = false }
+        )
+        return
+    }
 
     if (showPractice) {
         val practiceViewModel: PracticeViewModel = viewModel()
@@ -78,7 +93,8 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             onGameModeChanged = viewModel::setGameMode,
             onAnimationsChanged = viewModel::setAnimationsEnabled,
             onStartGame = viewModel::startGame,
-            onPractice = { showPractice = true }
+            onPractice = { showPractice = true },
+            onReview = { showReview = true }
         )
 
         GamePhase.PLAYING, GamePhase.GAME_OVER -> GameScreen(

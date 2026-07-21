@@ -64,6 +64,16 @@ object DrillSelector {
         ThemeTag.ALLOWED_TACTIC to setOf("fork", "pin", "skewer", "discoveredAttack")
     )
 
+    /** Lichess themes matching each game-phase tag. */
+    val PHASE_TO_LICHESS_THEMES: Map<ThemeTag, Set<String>> = mapOf(
+        ThemeTag.OPENING to setOf("opening"),
+        ThemeTag.MIDDLEGAME to setOf("middlegame"),
+        ThemeTag.ENDGAME to setOf(
+            "endgame", "rookEndgame", "pawnEndgame",
+            "knightEndgame", "bishopEndgame", "queenEndgame"
+        )
+    )
+
     /**
      * True when a stored progress row says this drill is due for review:
      * never practiced, or past its doubling interval (halved again while
@@ -87,6 +97,8 @@ object DrillSelector {
      * @param targetRating center of the puzzle difficulty window — the
      *   player's practice rating, which adapts to drill results
      * @param weaknesses the player's worst themes, worst first
+     * @param weakPhases game phases ranked by mistake frequency, worst
+     *   first; only the top phase influences selection
      * @param nowMs drives due-ness and seeds the session shuffle
      */
     fun buildQueue(
@@ -97,12 +109,14 @@ object DrillSelector {
         targetRating: Int,
         weaknesses: List<ThemeTag>,
         nowMs: Long,
-        limit: Int = 20
+        limit: Int = 20,
+        weakPhases: List<ThemeTag> = emptyList()
     ): List<Drill> {
         val mistakeQueue = orderMistakes(mistakes, progressById, nowMs)
             .map { Drill(mistake = it) }
-        val puzzleQueue = orderPuzzles(puzzles, progressById, targetRating, weaknesses, nowMs, limit)
-            .map { Drill(puzzle = it) }
+        val puzzleQueue =
+            orderPuzzles(puzzles, progressById, targetRating, weaknesses, weakPhases, nowMs, limit)
+                .map { Drill(puzzle = it) }
         val queue = when (source) {
             Source.MISTAKES -> mistakeQueue
             Source.PUZZLES -> puzzleQueue
@@ -132,12 +146,18 @@ object DrillSelector {
         progress: Map<String, PracticePosition>,
         targetRating: Int,
         weaknesses: List<ThemeTag>,
+        weakPhases: List<ThemeTag>,
         nowMs: Long,
         limit: Int
     ): List<Puzzle> {
         val targetThemes = weaknesses
             .flatMap { WEAKNESS_TO_LICHESS_THEMES[it] ?: emptySet() }
             .toSet()
+        // A player whose mistakes cluster in one phase gets that phase's
+        // puzzles preferred (below weakness match — the what beats the when)
+        val phaseThemes = weakPhases.firstOrNull()
+            ?.let { PHASE_TO_LICHESS_THEMES[it] }
+            ?: emptySet()
         // A small bundled set may have nothing inside the window; drilling
         // off-level puzzles beats an empty queue
         val inWindow = puzzles
@@ -149,6 +169,7 @@ object DrillSelector {
             .sortedWith(
                 compareByDescending<Puzzle> { isDue(progress["puzzle:${it.id}"], nowMs) }
                     .thenByDescending { it.themes.any { t -> t in targetThemes } }
+                    .thenByDescending { it.themes.any { t -> t in phaseThemes } }
             )
             .take(limit)
         val (due, notDue) = selected.partition { isDue(progress["puzzle:${it.id}"], nowMs) }

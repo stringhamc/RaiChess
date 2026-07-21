@@ -8,6 +8,8 @@ import androidx.room.Transaction
 /** Projection row for [GameDao.recentPlayerMistakes]. */
 data class MistakeRow(
     val gameId: Long,
+    /** Joins the observation to its drill progress ("mistake:<gameId>:<ply>"). */
+    val ply: Int,
     val themes: String,
     val centipawnLoss: Int
 )
@@ -72,7 +74,8 @@ interface GameDao {
      * first — the observation stream the weakness profile is derived from.
      */
     @Query(
-        "SELECT p.gameId AS gameId, p.themes AS themes, p.centipawnLoss AS centipawnLoss " +
+        "SELECT p.gameId AS gameId, p.ply AS ply, p.themes AS themes, " +
+            "p.centipawnLoss AS centipawnLoss " +
             "FROM positions p JOIN games g ON p.gameId = g.id " +
             "WHERE p.isPlayerMove = 1 AND p.centipawnLoss >= :minLossCp " +
             "ORDER BY g.datePlayed DESC, p.ply ASC LIMIT :limit"

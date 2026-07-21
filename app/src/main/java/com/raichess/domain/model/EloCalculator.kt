@@ -243,7 +243,9 @@ data class EloStats(
     val draws: Int,
     val confidenceInterval: Int,
     /** Lifetime Training-mode undos; a rough blunder-awareness signal. */
-    val totalUndos: Int = 0
+    val totalUndos: Int = 0,
+    /** Consecutive wins; a draw holds the streak, a loss resets it. */
+    val winStreak: Int = 0
 ) {
     val winRate: Double
         get() = if (gamesPlayed > 0) wins.toDouble() / gamesPlayed * 100.0 else 0.0
@@ -265,7 +267,12 @@ data class EloStats(
             wins = wins + if (result == GameResult.WIN) 1 else 0,
             losses = losses + if (result == GameResult.LOSS) 1 else 0,
             draws = draws + if (result == GameResult.DRAW) 1 else 0,
-            confidenceInterval = EloCalculator.getConfidenceInterval(gamesPlayed + 1)
+            confidenceInterval = EloCalculator.getConfidenceInterval(gamesPlayed + 1),
+            winStreak = when (result) {
+                GameResult.WIN -> winStreak + 1
+                GameResult.DRAW -> winStreak
+                GameResult.LOSS -> 0
+            }
         )
     }
 }

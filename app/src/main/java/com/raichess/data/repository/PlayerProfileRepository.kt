@@ -27,7 +27,8 @@ class PlayerProfileRepository(context: Context) {
             losses = prefs.getInt(KEY_LOSSES, 0),
             draws = prefs.getInt(KEY_DRAWS, 0),
             confidenceInterval = EloCalculator.getConfidenceInterval(gamesPlayed),
-            totalUndos = prefs.getInt(KEY_TOTAL_UNDOS, 0)
+            totalUndos = prefs.getInt(KEY_TOTAL_UNDOS, 0),
+            winStreak = prefs.getInt(KEY_WIN_STREAK, 0)
         )
     }
 
@@ -80,6 +81,7 @@ class PlayerProfileRepository(context: Context) {
             .putInt(KEY_WINS, updated.wins)
             .putInt(KEY_LOSSES, updated.losses)
             .putInt(KEY_DRAWS, updated.draws)
+            .putInt(KEY_WIN_STREAK, updated.winStreak)
             .apply()
 
         return updated to delta
@@ -95,5 +97,6 @@ class PlayerProfileRepository(context: Context) {
         private const val KEY_DRAWS = "draws"
         private const val KEY_TOTAL_UNDOS = "total_undos"
         private const val KEY_PRACTICE_RATING = "practice_rating"
+        private const val KEY_WIN_STREAK = "win_streak"
     }
 }

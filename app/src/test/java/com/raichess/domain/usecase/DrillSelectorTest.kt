@@ -148,6 +148,25 @@ class DrillSelectorTest {
     }
 
     @Test
+    fun `weak-phase puzzles win selection below weakness matches`() {
+        val queue = DrillSelector.buildQueue(
+            source = DrillSelector.Source.PUZZLES,
+            mistakes = emptyList(),
+            puzzles = listOf(
+                puzzle("plain", 800, "fork"),
+                puzzle("endgame", 820, "endgame")
+            ),
+            progressById = emptyMap(),
+            targetRating = 800,
+            weaknesses = emptyList(),
+            nowMs = now,
+            limit = 1,
+            weakPhases = listOf(ThemeTag.ENDGAME)
+        )
+        assertEquals(listOf("endgame"), queue.map { it.puzzle!!.id })
+    }
+
+    @Test
     fun `equal-priority queues are seed-stable but vary between sessions`() {
         val puzzles = ('a'..'h').map { puzzle("$it", 800, "theme-$it") }
         fun queueAt(seedMs: Long) = DrillSelector.buildQueue(

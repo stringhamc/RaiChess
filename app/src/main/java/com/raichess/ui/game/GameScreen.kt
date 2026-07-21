@@ -506,10 +506,13 @@ private fun statusText(state: GameUiState): String {
     val moveNumber = state.moveHistorySan.size / 2 + 1
     return when {
         state.ending != null -> when (state.ending) {
-            GameEnding.CHECKMATE_WIN -> "Checkmate — you win!" + eloDeltaText(state)
-            GameEnding.CHECKMATE_LOSS -> "Checkmate — you lose." + eloDeltaText(state)
+            GameEnding.CHECKMATE_WIN ->
+                "Checkmate — you win!" + eloDeltaText(state) + newPeakText(state)
+            GameEnding.CHECKMATE_LOSS ->
+                "Checkmate — you lose." + eloDeltaText(state) + lossEncouragement()
             GameEnding.DRAW -> "Draw." + eloDeltaText(state)
-            GameEnding.RESIGNED -> "You resigned." + eloDeltaText(state)
+            GameEnding.RESIGNED ->
+                "You resigned." + eloDeltaText(state) + lossEncouragement()
         }
         state.isAiThinking -> "Move $moveNumber · ${state.engineLabel} is thinking…"
         state.isPlayerInCheck -> "Move $moveNumber · Check!"
@@ -523,3 +526,13 @@ private fun eloDeltaText(state: GameUiState): String {
     val sign = if (delta >= 0) "+" else ""
     return " ELO $sign$delta → ${state.playerStats?.currentElo ?: ""}"
 }
+
+/** Celebrate a rating personal best the moment it happens. */
+private fun newPeakText(state: GameUiState): String {
+    val stats = state.playerStats ?: return ""
+    val climbed = (state.eloDelta ?: 0) > 0
+    return if (climbed && stats.currentElo >= stats.peakElo) " New peak rating!" else ""
+}
+
+/** Losses feed the coaching loop — say so instead of just "you lose". */
+private fun lossEncouragement(): String = " This game becomes practice material."
