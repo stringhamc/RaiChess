@@ -59,12 +59,20 @@ class StockfishWasmEngine(
 
     @Volatile private var webView: WebView? = null
     @Volatile private var state = State.UNINITIALIZED
-    // Sticky: set the first time a move is served by the RaiEngine fallback,
-    // so the UI indicator can show that Stockfish isn't actually driving.
+    // Set the first time a move is served by the RaiEngine fallback, so the
+    // UI label can reflect that not every move came from Stockfish.
     @Volatile private var everFellBack = false
+    // Failed init attempts so far; a transient failure gets retried (see
+    // ensureReady) before the engine gives up for good.
+    private var initAttempts = 0
 
     override val activeEngineLabel: String
-        get() = if (everFellBack || state == State.FAILED) "RaiEngine (fallback)" else "Stockfish"
+        get() = when {
+            state == State.READY && everFellBack -> "Stockfish (recovered)"
+            state == State.READY -> "Stockfish"
+            everFellBack || state == State.FAILED -> "RaiEngine (fallback)"
+            else -> "Stockfish"
+        }
     // Set once the engine is torn down (fail/close). Guards the async
     // createWebView post: if teardown wins the race, the freshly-built WebView
     // is destroyed immediately instead of leaking.
@@ -199,11 +207,19 @@ class StockfishWasmEngine(
     /** Build the WebView and complete the UCI handshake once. Thread-safe. */
     @Synchronized
     private fun ensureReady(): Boolean {
+        if (released) return false
         when (state) {
             State.READY -> return true
-            State.FAILED -> return false
+            State.FAILED -> {
+                // A transient failure (WebView provider updating, slow cold
+                // WASM compile) shouldn't downgrade the whole game to
+                // RaiEngine: retry on a later call before giving up for good
+                if (initAttempts >= MAX_INIT_ATTEMPTS) return false
+                state = State.UNINITIALIZED
+            }
             State.UNINITIALIZED -> Unit
         }
+        initAttempts++
 
         output.clear()
         mainHandler.post { createWebView() }
@@ -246,7 +262,8 @@ class StockfishWasmEngine(
     private fun fail(reason: String): Boolean {
         Log.w(TAG, "Stockfish unavailable ($reason); using RaiEngine fallback")
         state = State.FAILED
-        released = true
+        // NOT `released = true`: released is close()'s permanent teardown
+        // signal, and a failed attempt must stay retryable (see ensureReady)
         destroyWebView()
         return false
     }
@@ -398,5 +415,7 @@ class StockfishWasmEngine(
         // Max blocking-poll granularity; bounds how long a wait can ignore a
         // teardown (released) signal.
         private const val POLL_SLICE_MS = 200L
+        // Total init tries before FAILED becomes permanent for this game.
+        private const val MAX_INIT_ATTEMPTS = 2
     }
 }

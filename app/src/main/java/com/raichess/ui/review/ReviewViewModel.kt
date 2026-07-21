@@ -28,9 +28,11 @@ data class ReviewMistakeUi(
     val detail: String,
     /** Board before the mistake, FEN chars a1=0..h8=63. */
     val squares: List<Char?>,
-    /** The mistake move's squares. */
+    /** The mistake move's squares (rendered as a gray arrow ending in ✕). */
     val playedMove: LastMove?,
-    /** The engine's best move's squares (hint styling). */
+    /** The engine's best move (rendered as a white arrow ending in ○). */
+    val bestMove: LastMove?,
+    /** The engine's best move's squares (square tint under the arrow). */
     val bestHighlights: Set<Int>
 )
 
@@ -131,6 +133,7 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
             detail = "You played ${LanFormat.arrow(row.movePlayed)}$bestText.$why",
             squares = HintAdvisor.parseFenBoard(row.fen) ?: List(64) { null },
             playedMove = moveSquares(row.movePlayed),
+            bestMove = row.bestMove?.let { moveSquares(it) },
             bestHighlights = row.bestMove?.let { lan ->
                 moveSquares(lan)?.let { setOf(it.from, it.to) }
             } ?: emptySet()
