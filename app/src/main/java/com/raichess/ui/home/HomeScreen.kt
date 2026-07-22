@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -26,15 +28,22 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.raichess.BuildConfig
+import com.raichess.data.diagnostics.EngineDiagnostics
 import com.raichess.data.engine.RaiEngine
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
@@ -257,6 +266,63 @@ fun HomeScreen(
             style = MaterialTheme.typography.labelSmall,
             letterSpacing = 1.sp,
             color = MaterialTheme.colorScheme.secondary
+        )
+        EngineLogRow()
+    }
+}
+
+/**
+ * Debug affordance: opens the persisted engine event log (see
+ * EngineDiagnostics) so "why did my game fall back to RaiEngine?" is
+ * answerable from the device, without logcat.
+ */
+@Composable
+private fun EngineLogRow() {
+    var showLog by remember { mutableStateOf(false) }
+    TextButton(onClick = { showLog = true }) {
+        Text(
+            text = "Engine log",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.secondary
+        )
+    }
+    if (showLog) {
+        val context = LocalContext.current
+        // Newest first — the event being debugged is usually the last one
+        val entries = remember { EngineDiagnostics.entries(context).reversed() }
+        AlertDialog(
+            onDismissRequest = { showLog = false },
+            title = { Text("Engine log") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    if (entries.isEmpty()) {
+                        Text(
+                            "No engine events recorded yet.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    entries.forEach { entry ->
+                        Text(
+                            text = entry,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLog = false }) { Text("Close") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    EngineDiagnostics.clear(context)
+                    showLog = false
+                }) { Text("Clear") }
+            }
         )
     }
 }

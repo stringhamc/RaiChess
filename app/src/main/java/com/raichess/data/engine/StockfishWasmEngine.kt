@@ -15,6 +15,7 @@ import androidx.webkit.WebViewClientCompat
 import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
+import com.raichess.data.diagnostics.EngineDiagnostics
 import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.PositionAnalysis
 import org.json.JSONObject
@@ -103,7 +104,7 @@ class StockfishWasmEngine(
                 // rather than burning a fallback search on a stale board —
                 // ensureReady's released-guard must not read as "failed"
                 if (released) return null
-                return fallbackMove(board)
+                return fallbackMove(board, "engine unavailable (init failed)")
             }
             // Closed during/just after init: bail before doing search work.
             if (released) return null
@@ -121,13 +122,13 @@ class StockfishWasmEngine(
                 // search against a board the ViewModel has likely replaced.
                 if (released) return null
                 Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
-                return fallbackMove(board)
+                return fallbackMove(board, "no bestmove within ${moveTimeMs + BESTMOVE_GRACE_MS}ms")
             }
-            parseUciBestMove(board, best) ?: fallbackMove(board)
+            parseUciBestMove(board, best) ?: fallbackMove(board, "unparseable bestmove: $best")
         } catch (e: Exception) {
             // Any failure (incl. thread interruption) must not break play
             Log.w(TAG, "selectMove failed; using RaiEngine fallback", e)
-            fallbackMove(board)
+            fallbackMove(board, "selectMove threw: ${e.javaClass.simpleName}")
         }
     }
 
@@ -221,7 +222,13 @@ class StockfishWasmEngine(
     }
 
     /** Serve a move from the RaiEngine fallback and remember that we did. */
-    private fun fallbackMove(board: Board): Move? {
+    private fun fallbackMove(board: Board, cause: String): Move? {
+        // Log the transition, not every fallback move: a whole game on the
+        // fallback would otherwise flood the ring buffer and push out the
+        // init-failure entries that actually explain it
+        if (!everFellBack) {
+            EngineDiagnostics.record(appContext, "moves now served by RaiEngine: $cause")
+        }
         everFellBack = true
         return fallback.selectMove(board)
     }
@@ -242,6 +249,7 @@ class StockfishWasmEngine(
             State.UNINITIALIZED -> Unit
         }
         initAttempts++
+        val initStartedAt = SystemClock.elapsedRealtime()
         // The retry runs on the SAME full budgets as the first attempt: it
         // is the last chance before FAILED becomes permanent, and every
         // budget guards one of the slow transient causes the retry exists
@@ -278,6 +286,15 @@ class StockfishWasmEngine(
 
         Log.i(TAG, "Stockfish WASM ready (targetElo band, movetime=${moveTimeMs}ms)")
         state = State.READY
+        val elapsed = SystemClock.elapsedRealtime() - initStartedAt
+        EngineDiagnostics.record(
+            appContext,
+            if (initAttempts > 1 || everFellBack) {
+                "stockfish recovered (attempt $initAttempts, ${elapsed}ms)"
+            } else {
+                "stockfish ready (${elapsed}ms)"
+            }
+        )
         return true
     }
 
@@ -300,6 +317,10 @@ class StockfishWasmEngine(
      */
     private fun fail(reason: String): Boolean {
         Log.w(TAG, "Stockfish unavailable ($reason); using RaiEngine fallback")
+        EngineDiagnostics.record(
+            appContext,
+            "stockfish init failed (attempt $initAttempts/$MAX_INIT_ATTEMPTS): $reason"
+        )
         state = State.FAILED
         // Invalidate this attempt's in-flight createWebView post right away:
         // without the bump, a construction that outlived this timeout could
