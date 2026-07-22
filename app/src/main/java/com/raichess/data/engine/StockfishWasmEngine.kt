@@ -94,7 +94,13 @@ class StockfishWasmEngine(
     // sequential coroutine (one move at a time), which this relies on.
     override fun selectMove(board: Board): Move? {
         return try {
-            if (!ensureReady()) return fallbackMove(board)
+            if (!ensureReady()) {
+                // Torn down (new game closed this instance): return null
+                // rather than burning a fallback search on a stale board —
+                // ensureReady's released-guard must not read as "failed"
+                if (released) return null
+                return fallbackMove(board)
+            }
             // Closed during/just after init: bail before doing search work.
             if (released) return null
 
@@ -130,7 +136,11 @@ class StockfishWasmEngine(
      */
     override fun analyze(board: Board, moveTimeMs: Long): PositionAnalysis? {
         return try {
-            if (!ensureReady()) return fallbackAnalysis(board, moveTimeMs)
+            if (!ensureReady()) {
+                // Same released-vs-failed distinction as selectMove
+                if (released) return null
+                return fallbackAnalysis(board, moveTimeMs)
+            }
             if (released) return null
 
             // Keep the interface's "never strength-limited" promise on play
