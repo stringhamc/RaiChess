@@ -90,9 +90,9 @@ class StockfishWasmEngine(
             everFellBack || state == State.FAILED -> "RaiEngine (fallback)"
             else -> "Stockfish"
         }
-    // Set once the engine is torn down (fail/close). Guards the async
-    // createWebView post: if teardown wins the race, the freshly-built WebView
-    // is destroyed immediately instead of leaking.
+    // Set once the engine is permanently torn down — by close() ONLY. A
+    // failed init deliberately does not set this (fail() keeps the attempt
+    // retryable); stale-attempt cleanup is handled by attemptGeneration.
     @Volatile private var released = false
 
     private enum class State { UNINITIALIZED, READY, FAILED }

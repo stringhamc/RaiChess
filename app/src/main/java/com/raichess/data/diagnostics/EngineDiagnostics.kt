@@ -25,7 +25,9 @@ object EngineDiagnostics {
         Log.i(TAG, message)
         try {
             val prefs = prefs(context)
-            val stamped = "${timestamp()}  $message"
+            // Entries are newline-delimited in storage: a message containing
+            // one would silently split into bogus entries
+            val stamped = "${timestamp()}  ${message.replace('\n', ' ')}"
             val updated = appended(load(prefs.getString(KEY_ENTRIES, "")), stamped, MAX_ENTRIES)
             prefs.edit().putString(KEY_ENTRIES, updated.joinToString("\n")).apply()
         } catch (e: Exception) {
