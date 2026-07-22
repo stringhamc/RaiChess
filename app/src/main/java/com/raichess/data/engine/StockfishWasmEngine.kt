@@ -63,6 +63,10 @@ class StockfishWasmEngine(
     // Set the first time a move is served by the RaiEngine fallback, so the
     // UI label can reflect that not every move came from Stockfish.
     @Volatile private var everFellBack = false
+    // True while moves are being served by the fallback; cleared on a
+    // successful (re)init so a recover-then-fail-again cycle logs its
+    // second engagement instead of being swallowed by the sticky flag.
+    @Volatile private var fallbackActive = false
     // Failed init attempts so far; a transient failure gets retried (see
     // ensureReady) before the engine gives up for good.
     private var initAttempts = 0
@@ -226,8 +230,9 @@ class StockfishWasmEngine(
         // Log the transition, not every fallback move: a whole game on the
         // fallback would otherwise flood the ring buffer and push out the
         // init-failure entries that actually explain it
-        if (!everFellBack) {
+        if (!fallbackActive) {
             EngineDiagnostics.record(appContext, "moves now served by RaiEngine: $cause")
+            fallbackActive = true
         }
         everFellBack = true
         return fallback.selectMove(board)
@@ -286,6 +291,7 @@ class StockfishWasmEngine(
 
         Log.i(TAG, "Stockfish WASM ready (targetElo band, movetime=${moveTimeMs}ms)")
         state = State.READY
+        fallbackActive = false
         val elapsed = SystemClock.elapsedRealtime() - initStartedAt
         EngineDiagnostics.record(
             appContext,
