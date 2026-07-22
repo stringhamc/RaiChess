@@ -74,6 +74,10 @@ class StockfishWasmEngine(
     // synchronized ensureReady; read on the main thread.
     @Volatile private var attemptGeneration = 0
 
+    // Note: state == FAILED alone also shows the fallback label, even when
+    // no *move* fell back yet (e.g. the failure surfaced via analyze(),
+    // which never sets everFellBack) — a FAILED engine will serve every
+    // subsequent move from the fallback, so the label is already true.
     override val activeEngineLabel: String
         get() = when {
             state == State.READY && everFellBack -> "Stockfish (recovered)"
@@ -354,6 +358,8 @@ class StockfishWasmEngine(
             // retry may already own the queue: destroy quietly — no queue
             // signal, no webView overwrite, no leak.
             if (released || generation != attemptGeneration) {
+                // No removeJavascriptInterface here (unlike destroyWebView):
+                // loadUrl was never called, so no JS ever saw the bridge
                 view.destroy()
                 return
             }
