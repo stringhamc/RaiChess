@@ -279,6 +279,11 @@ class StockfishWasmEngine(
         return awaitToken(HANDSHAKE_TIMEOUT_MS) { it == "readyok" } != null
     }
 
+    /**
+     * Must only be called from inside [ensureReady]'s lock: the
+     * generation/attempt counters it mutates are unsynchronized fields
+     * whose safety depends entirely on that single-writer discipline.
+     */
     private fun fail(reason: String): Boolean {
         Log.w(TAG, "Stockfish unavailable ($reason); using RaiEngine fallback")
         state = State.FAILED
