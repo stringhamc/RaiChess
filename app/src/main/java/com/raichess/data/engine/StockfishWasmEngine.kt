@@ -228,19 +228,16 @@ class StockfishWasmEngine(
             State.UNINITIALIZED -> Unit
         }
         initAttempts++
-        // A retry runs synchronously inside a move, so the fast steps
-        // (worker start, isready round-trips) run on half budgets. The
-        // uciok budget deliberately stays FULL: that's where the cold WASM
-        // compile lands — the failure mode the retry exists to rescue —
-        // and shrinking it would make the retry systematically worse at
-        // exactly that. Worst case for a fully-failed retry is then
-        // ~6+15+2.5+2.5s ≈ 26s of "thinking…", but in practice a step
-        // either fails much sooner or succeeds (a second compile usually
-        // hits the WebView's code cache and is far faster than the first).
-        val retrying = initAttempts > 1
-        val initBudget = if (retrying) INIT_TIMEOUT_MS / 2 else INIT_TIMEOUT_MS
-        val uciokBudget = UCIOK_TIMEOUT_MS
-        val readyBudget = if (retrying) HANDSHAKE_TIMEOUT_MS / 2 else HANDSHAKE_TIMEOUT_MS
+        // The retry runs on the SAME full budgets as the first attempt: it
+        // is the last chance before FAILED becomes permanent, and every
+        // budget guards one of the slow transient causes the retry exists
+        // to rescue (WebView provider updating lands in the init wait, the
+        // cold WASM compile in the uciok wait) — shrinking any of them
+        // makes the retry systematically worse at exactly its job. Known
+        // tradeoff: the one retried move can stall up to ~32s worst case,
+        // behind the visible "thinking…" state; in practice a failing step
+        // dies far sooner, and a second compile usually hits the WebView's
+        // code cache and is much faster than the first.
 
         output.clear()
         attemptGeneration++
@@ -248,10 +245,10 @@ class StockfishWasmEngine(
         mainHandler.post { createWebView(generation) }
 
         // engine.html calls AndroidEngine.onReady() once the worker is created
-        val ready = awaitToken(initBudget) { it == READY_SENTINEL || it == ERROR_SENTINEL }
-        if (ready != READY_SENTINEL) return fail("worker did not start within ${initBudget}ms")
+        val ready = awaitToken(INIT_TIMEOUT_MS) { it == READY_SENTINEL || it == ERROR_SENTINEL }
+        if (ready != READY_SENTINEL) return fail("worker did not start within ${INIT_TIMEOUT_MS}ms")
 
-        if (!handshake(uciokBudget, readyBudget)) return fail("uci handshake failed")
+        if (!handshake()) return fail("uci handshake failed")
 
         // Apply strength for this ELO. The bundled SF10 build only supports
         // `Skill Level` (UCI_Elo/UCI_LimitStrength came in SF11), so
@@ -263,23 +260,23 @@ class StockfishWasmEngine(
         }
         send("setoption name Threads value 1")
         send("setoption name Hash value 16")
-        if (!isReady(readyBudget)) return fail("engine not ready after options")
+        if (!isReady()) return fail("engine not ready after options")
 
         Log.i(TAG, "Stockfish WASM ready (targetElo band, movetime=${moveTimeMs}ms)")
         state = State.READY
         return true
     }
 
-    private fun handshake(uciokBudgetMs: Long, readyBudgetMs: Long): Boolean {
+    private fun handshake(): Boolean {
         send("uci")
         // uciok arrives only after the cold WASM compile — allow for that.
-        if (awaitToken(uciokBudgetMs) { it == "uciok" } == null) return false
-        return isReady(readyBudgetMs)
+        if (awaitToken(UCIOK_TIMEOUT_MS) { it == "uciok" } == null) return false
+        return isReady()
     }
 
-    private fun isReady(budgetMs: Long = HANDSHAKE_TIMEOUT_MS): Boolean {
+    private fun isReady(): Boolean {
         send("isready")
-        return awaitToken(budgetMs) { it == "readyok" } != null
+        return awaitToken(HANDSHAKE_TIMEOUT_MS) { it == "readyok" } != null
     }
 
     private fun fail(reason: String): Boolean {
