@@ -50,6 +50,7 @@ import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.usecase.HintAdvisor
 import com.raichess.ui.theme.ChessColors
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /**
  * The main game screen: board, status, captured material, move list,
@@ -97,7 +98,7 @@ fun GameScreen(
             thinkingTick = 0
             if (state.isAiThinking) {
                 while (true) {
-                    kotlinx.coroutines.delay(CHATTER_INTERVAL_MS)
+                    delay(CHATTER_INTERVAL_MS)
                     thinkingTick++
                 }
             }
