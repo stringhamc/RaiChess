@@ -292,7 +292,12 @@ class StockfishWasmEngine(
         }
         send("setoption name Threads value 1")
         send("setoption name Hash value 16")
-        if (!isReady()) return fail("engine not ready after options")
+        // LONG budget here, not the 5s round-trip one: field logs showed
+        // devices failing "engine not ready after options" ~6s after game
+        // start — the JS wrapper answers uciok and the first readyok from
+        // its pre-init queue while the WASM compile is still running, so
+        // THIS isready is where the real compile wait actually surfaces.
+        if (!isReady(OPTIONS_READY_TIMEOUT_MS)) return fail("engine not ready after options")
 
         Log.i(TAG, "Stockfish WASM ready (targetElo band, movetime=${moveTimeMs}ms)")
         state = State.READY
@@ -316,9 +321,9 @@ class StockfishWasmEngine(
         return isReady()
     }
 
-    private fun isReady(): Boolean {
+    private fun isReady(budgetMs: Long = HANDSHAKE_TIMEOUT_MS): Boolean {
         send("isready")
-        return awaitToken(HANDSHAKE_TIMEOUT_MS) { it == "readyok" } != null
+        return awaitToken(budgetMs) { it == "readyok" } != null
     }
 
     /**
@@ -470,7 +475,12 @@ class StockfishWasmEngine(
 
         @JavascriptInterface fun onError(message: String) {
             Log.w(TAG, "engine JS error: $message")
-            if (current()) output.offer(ERROR_SENTINEL)
+            if (current()) {
+                // Into the persistent log too: a JS/WASM crash is otherwise
+                // indistinguishable from a timeout in the diagnostics
+                EngineDiagnostics.record(appContext, "engine JS error: ${message.take(200)}")
+                output.offer(ERROR_SENTINEL)
+            }
         }
     }
 
@@ -507,9 +517,14 @@ class StockfishWasmEngine(
         // wait overlaps the player's own first think via warmUp(), so a
         // generous budget costs little.
         private const val UCIOK_TIMEOUT_MS = 30000L
-        // Post-handshake readiness (`isready`/`readyok`): the module is already
-        // loaded by then, so these replies are fast.
+        // Post-handshake readiness (`isready`/`readyok`) round-trips once
+        // the engine is genuinely up: fast.
         private const val HANDSHAKE_TIMEOUT_MS = 5000L
+        // The isready AFTER the option batch can sit behind the whole WASM
+        // compile on builds whose wrapper acks the handshake from a pre-init
+        // queue (observed in the field via EngineDiagnostics) — budget it
+        // like the compile, not like a round-trip.
+        private const val OPTIONS_READY_TIMEOUT_MS = 30000L
         private const val BESTMOVE_GRACE_MS = 4000L
         // Max blocking-poll granularity; bounds how long a wait can ignore a
         // teardown (released) signal.

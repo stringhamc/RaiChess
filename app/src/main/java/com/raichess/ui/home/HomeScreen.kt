@@ -38,7 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -288,6 +290,7 @@ private fun EngineLogRow() {
     }
     if (showLog) {
         val context = LocalContext.current
+        val clipboard = LocalClipboardManager.current
         // Newest first — the event being debugged is usually the last one
         val entries = remember { EngineDiagnostics.entries(context).reversed() }
         AlertDialog(
@@ -304,12 +307,21 @@ private fun EngineLogRow() {
                             "No engine events recorded yet.",
                             style = MaterialTheme.typography.bodySmall
                         )
+                    } else {
+                        Text(
+                            "Tap a line to copy it.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
                     }
                     entries.forEach { entry ->
                         Text(
                             text = entry,
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(vertical = 2.dp)
+                            modifier = Modifier
+                                .clickable { clipboard.setText(AnnotatedString(entry)) }
+                                .padding(vertical = 2.dp)
                         )
                     }
                 }
@@ -318,10 +330,15 @@ private fun EngineLogRow() {
                 TextButton(onClick = { showLog = false }) { Text("Close") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    EngineDiagnostics.clear(context)
-                    showLog = false
-                }) { Text("Clear") }
+                Row {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(entries.joinToString("\n")))
+                    }) { Text("Copy all") }
+                    TextButton(onClick = {
+                        EngineDiagnostics.clear(context)
+                        showLog = false
+                    }) { Text("Clear") }
+                }
             }
         )
     }
