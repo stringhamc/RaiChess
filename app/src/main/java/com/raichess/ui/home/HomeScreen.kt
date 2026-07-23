@@ -274,9 +274,10 @@ fun HomeScreen(
 }
 
 /**
- * Debug affordance: opens the persisted engine event log (see
- * EngineDiagnostics) so "why did my game fall back to RaiEngine?" is
- * answerable from the device, without logcat.
+ * Deliberately shipped in ALL builds, not gated behind BuildConfig.DEBUG:
+ * the point is that a player in the field can self-diagnose "why did my
+ * game fall back to RaiEngine?" from the device, without logcat. Opens
+ * the persisted engine event log (see EngineDiagnostics).
  */
 @Composable
 private fun EngineLogRow() {

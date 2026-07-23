@@ -99,7 +99,13 @@ class StockfishWasmEngine(
 
     /** Kick the WebView/WASM init early so move one doesn't pay for it. */
     override fun warmUp() {
-        ensureReady()
+        try {
+            ensureReady()
+        } catch (e: Exception) {
+            // Best-effort by contract: same "must not break play" discipline
+            // as selectMove/analyze — the first real call retries/falls back
+            Log.w(TAG, "warmUp failed", e)
+        }
     }
 
     // Not safe for concurrent callers: the clear()/send()/awaitToken() sequence
