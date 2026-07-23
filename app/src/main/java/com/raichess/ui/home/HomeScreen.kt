@@ -291,8 +291,10 @@ private fun EngineLogRow() {
     if (showLog) {
         val context = LocalContext.current
         val clipboard = LocalClipboardManager.current
-        // Newest first — the event being debugged is usually the last one
-        val entries = remember { EngineDiagnostics.entries(context).reversed() }
+        // Stored oldest-first; displayed newest-first (the event being
+        // debugged is usually the last one), copied chronologically
+        val stored = remember { EngineDiagnostics.entries(context) }
+        val entries = remember(stored) { stored.reversed() }
         AlertDialog(
             onDismissRequest = { showLog = false },
             title = { Text("Engine log") },
@@ -332,7 +334,7 @@ private fun EngineLogRow() {
             dismissButton = {
                 Row {
                     TextButton(onClick = {
-                        clipboard.setText(AnnotatedString(entries.joinToString("\n")))
+                        clipboard.setText(AnnotatedString(stored.joinToString("\n")))
                     }) { Text("Copy all") }
                     TextButton(onClick = {
                         EngineDiagnostics.clear(context)
