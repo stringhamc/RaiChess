@@ -12,6 +12,7 @@ import com.github.bhlangonijr.chesslib.Square
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.raichess.data.repository.GameRepository
+import com.raichess.data.repository.LessonRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.PuzzleRepository
@@ -20,6 +21,7 @@ import com.raichess.domain.model.PracticeRating
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.DrillSelector
 import com.raichess.domain.usecase.GameAnalyzer
+import com.raichess.domain.usecase.LessonPlanner
 import com.raichess.domain.usecase.PuzzleDrill
 import com.raichess.domain.usecase.WeaknessProfile
 import kotlinx.coroutines.CancellationException
@@ -54,7 +56,13 @@ data class PracticeUiState(
     /** Consecutive solves this session, for streak encouragement. */
     val solvedStreak: Int = 0,
     /** Adaptive puzzle-solving rating (null until first load). */
-    val practiceRating: Int? = null
+    val practiceRating: Int? = null,
+    /** Active lesson title (Lesson source only). */
+    val lessonTitle: String? = null,
+    /** "3 of 8 solved" for the active lesson. */
+    val lessonProgressText: String? = null,
+    /** True when every lesson in the current plan is complete. */
+    val lessonComplete: Boolean = false
 )
 
 /**
@@ -69,10 +77,13 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     private val practiceRepository = PracticeRepository(application)
     private val gameRepository = GameRepository(application)
     private val profileRepository = PlayerProfileRepository(application)
+    private val lessonRepository = LessonRepository(application)
 
     private var queue: List<DrillSelector.Drill> = emptyList()
     private var queueIndex = 0
     private var loadJob: Job? = null
+    private var activeLessonUnit: LessonPlanner.Lesson? = null
+    private var lessonJustCompleted = false
     private var activePuzzle: PuzzleDrill? = null
     private var activeMistake: DrillSelector.MistakeDrill? = null
     private var board = Board()
@@ -124,6 +135,54 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             // above: bail before touching queue state
             ensureActive()
             val targetRating = profileRepository.getPracticeRating()
+            lessonJustCompleted = false
+
+            if (source == DrillSelector.Source.LESSON) {
+                val plan = LessonPlanner.buildPlan(profile)
+                val solves = try {
+                    lessonRepository.getSolves()
+                } catch (e: Exception) {
+                    Log.w(TAG, "lesson progress unavailable", e)
+                    emptyMap()
+                }
+                val lesson = LessonPlanner.activeLesson(plan, solves)
+                activeLessonUnit = lesson
+                if (lesson == null) {
+                    _uiState.value = _uiState.value.copy(
+                        loading = false,
+                        queueEmpty = true,
+                        lessonComplete = true,
+                        lessonTitle = null,
+                        lessonProgressText = null,
+                        practiceRating = targetRating
+                    )
+                    return@launch
+                }
+                queue = withContext(Dispatchers.Default) {
+                    DrillSelector.buildLessonQueue(
+                        lesson = lesson,
+                        mistakes = mistakes,
+                        puzzles = puzzles,
+                        progressById = progress,
+                        targetRating = targetRating,
+                        nowMs = System.currentTimeMillis()
+                    )
+                }
+                queueIndex = 0
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
+                    queueEmpty = queue.isEmpty(),
+                    lessonComplete = false,
+                    lessonTitle = lesson.title,
+                    lessonProgressText =
+                        "${(solves[lesson.id] ?: 0)} of ${lesson.targetSolves} solved",
+                    practiceRating = targetRating
+                )
+                if (queue.isNotEmpty()) startDrill(queue[0])
+                return@launch
+            }
+
+            activeLessonUnit = null
             // Off the main thread: the sort is trivial for the seed set but
             // the fetch script can grow the asset to thousands of puzzles
             queue = withContext(Dispatchers.Default) {
@@ -142,6 +201,9 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             _uiState.value = _uiState.value.copy(
                 loading = false,
                 queueEmpty = queue.isEmpty(),
+                lessonComplete = false,
+                lessonTitle = null,
+                lessonProgressText = null,
                 practiceRating = targetRating
             )
             if (queue.isNotEmpty()) startDrill(queue[0])
@@ -149,6 +211,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun nextDrill() {
+        // A completed lesson advances the plan: reload picks the next unit
+        if (lessonJustCompleted) {
+            loadQueue(DrillSelector.Source.LESSON)
+            return
+        }
         if (queue.isEmpty()) return
         if (queueIndex + 1 >= queue.size) {
             // Full pass done — rebuild instead of wrapping, so due-ness and
@@ -322,14 +389,38 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             ?.let { setOf(it.from.ordinal, it.to.ordinal) }
             ?: emptySet()
         val streak = if (solved) state.solvedStreak + 1 else 0
+
+        // Lesson bookkeeping: solves advance the active unit; completing
+        // it flags the next "Next" tap to load the following lesson
+        var lessonProgress: String? = null
+        var lessonDonePrompt: String? = null
+        val lesson = activeLessonUnit
+        if (solved && state.source == DrillSelector.Source.LESSON && lesson != null) {
+            val solves = try {
+                lessonRepository.recordSolve(lesson.id)
+            } catch (e: Exception) {
+                Log.w(TAG, "failed to record lesson solve", e)
+                null
+            }
+            if (solves != null) {
+                lessonProgress =
+                    "${solves.coerceAtMost(lesson.targetSolves)} of ${lesson.targetSolves} solved"
+                if (solves >= lesson.targetSolves) {
+                    lessonJustCompleted = true
+                    lessonDonePrompt = "Lesson complete! Tap Next for your next lesson."
+                }
+            }
+        }
+
         _uiState.value = state.copy(
             squares = boardSnapshot(),
             phase = if (solved) DrillPhase.SOLVED else DrillPhase.FAILED,
-            prompt = if (solved) {
-                if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
-            } else {
-                failPrompt(revealLan)
+            prompt = when {
+                lessonDonePrompt != null -> lessonDonePrompt
+                solved -> if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
+                else -> failPrompt(revealLan)
             },
+            lessonProgressText = lessonProgress ?: state.lessonProgressText,
             selectedSquare = null,
             legalTargets = emptySet(),
             revealHighlights = reveal,

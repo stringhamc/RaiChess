@@ -23,7 +23,7 @@ import kotlin.random.Random
  */
 object DrillSelector {
 
-    enum class Source { MIXED, MISTAKES, PUZZLES }
+    enum class Source { MIXED, MISTAKES, PUZZLES, LESSON }
 
     /** One queued drill: exactly one of [puzzle]/[mistake] is set. */
     data class Drill(
@@ -51,6 +51,13 @@ object DrillSelector {
 
     /** Puzzles this far from the player's ELO are filtered out. */
     private const val RATING_WINDOW = 300
+
+    /**
+     * Lesson difficulty window, skewed upward: lessons exist to stretch,
+     * so at-or-above-level material beats comfortable repetition.
+     */
+    private const val LESSON_WINDOW_BELOW = 150
+    private const val LESSON_WINDOW_ABOVE = 400
 
     /** Spaced repetition: base interval doubles with each successful rep. */
     private const val BASE_INTERVAL_MS = 24L * 60 * 60 * 1000
@@ -120,9 +127,52 @@ object DrillSelector {
         val queue = when (source) {
             Source.MISTAKES -> mistakeQueue
             Source.PUZZLES -> puzzleQueue
-            Source.MIXED -> interleave(mistakeQueue, puzzleQueue)
+            // LESSON has its own entry point (buildLessonQueue); routed
+            // here it degrades to the mixed queue rather than crashing
+            Source.MIXED, Source.LESSON -> interleave(mistakeQueue, puzzleQueue)
         }
         return queue.take(limit)
+    }
+
+    /**
+     * Queue for one lesson (see LessonPlanner): only puzzles carrying the
+     * lesson's themes, in an upward-skewed rating window, interleaved with
+     * the player's own mistakes matching the lesson's weakness tag. Same
+     * ramp/spacing/session-shuffle treatment as the regular queue.
+     */
+    fun buildLessonQueue(
+        lesson: LessonPlanner.Lesson,
+        mistakes: List<MistakeDrill>,
+        puzzles: List<Puzzle>,
+        progressById: Map<String, PracticePosition>,
+        targetRating: Int,
+        nowMs: Long,
+        limit: Int = 20
+    ): List<Drill> {
+        val lessonMistakes = lesson.weaknessTheme?.let { tag ->
+            mistakes.filter { tag in it.themes }
+        } ?: emptyList()
+        val mistakeQueue = orderMistakes(lessonMistakes, progressById, nowMs)
+            .map { Drill(mistake = it) }
+
+        val themed = puzzles.filter { p -> p.themes.any { it in lesson.themes } }
+        val inWindow = themed
+            .filter {
+                it.rating >= targetRating - LESSON_WINDOW_BELOW &&
+                    it.rating <= targetRating + LESSON_WINDOW_ABOVE
+            }
+            .ifEmpty { themed }
+        val selected = inWindow
+            .shuffled(Random(nowMs))
+            .sortedByDescending { isDue(progressById["puzzle:${it.id}"], nowMs) }
+            .take(limit)
+        val (due, notDue) = selected.partition { isDue(progressById["puzzle:${it.id}"], nowMs) }
+        val puzzleQueue = (
+            spaceOutThemes(due.sortedBy { it.rating }) +
+                spaceOutThemes(notDue.sortedBy { it.rating })
+            ).map { Drill(puzzle = it) }
+
+        return interleave(mistakeQueue, puzzleQueue).take(limit)
     }
 
     /** Due-first, then most recent mistakes first (input order preserved). */
