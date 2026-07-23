@@ -209,6 +209,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             newEngine
         }
+        // Start the slow WASM init now, overlapping the player's own first
+        // think, so move one doesn't stall (or worse, time out into the
+        // fallback) waiting for the cold compile. engineLock keeps this
+        // serialized with the first real engine call; if the AI moves
+        // first, whichever acquires the lock first performs the init. The
+        // dedicated analyzer (weak-band Training) warms too, so the first
+        // coach baseline doesn't pay the compile either.
+        val analyzer = analysisEngine
+        viewModelScope.launch(Dispatchers.Default) {
+            engineLock.withLock {
+                newEngine.warmUp()
+                if (analyzer !== newEngine) analyzer?.warmUp()
+            }
+        }
         gameRecorded = false
         gameId++
         gameUndoCount = 0

@@ -1,6 +1,7 @@
 package com.raichess.data.engine
 
 import android.content.Context
+import com.raichess.data.diagnostics.EngineDiagnostics
 
 /**
  * Chooses the opponent engine for a target ELO.
@@ -22,7 +23,14 @@ object EngineFactory {
     fun usesStockfish(targetElo: Int): Boolean = targetElo >= STOCKFISH_MIN_ELO
 
     fun create(context: Context, targetElo: Int): ChessEngine {
-        return if (usesStockfish(targetElo)) {
+        val stockfish = usesStockfish(targetElo)
+        // Game-start header in the engine log: frames any fallback events
+        // that follow (and makes "1350 → Stockfish" band routing visible)
+        EngineDiagnostics.record(
+            context,
+            "game start: targetElo $targetElo → ${if (stockfish) "Stockfish" else "RaiEngine band"}"
+        )
+        return if (stockfish) {
             StockfishWasmEngine(context, targetElo, fallback = RaiEngine(targetElo))
         } else {
             RaiEngine(targetElo)

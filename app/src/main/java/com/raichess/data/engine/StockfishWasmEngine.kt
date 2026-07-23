@@ -15,6 +15,7 @@ import androidx.webkit.WebViewClientCompat
 import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
+import com.raichess.data.diagnostics.EngineDiagnostics
 import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.PositionAnalysis
 import org.json.JSONObject
@@ -59,18 +60,53 @@ class StockfishWasmEngine(
 
     @Volatile private var webView: WebView? = null
     @Volatile private var state = State.UNINITIALIZED
-    // Sticky: set the first time a move is served by the RaiEngine fallback,
-    // so the UI indicator can show that Stockfish isn't actually driving.
+    // Set the first time a move is served by the RaiEngine fallback, so the
+    // UI label can reflect that not every move came from Stockfish.
     @Volatile private var everFellBack = false
+    // True while moves are being served by the fallback; cleared on a
+    // successful (re)init so a recover-then-fail-again cycle logs its
+    // second engagement instead of being swallowed by the sticky flag.
+    @Volatile private var fallbackActive = false
+    // Failed init attempts so far; a transient failure gets retried (see
+    // ensureReady) before the engine gives up for good.
+    private var initAttempts = 0
+    // Identifies which init attempt owns the async createWebView post. A
+    // WebView construction can stall for many seconds (provider updating)
+    // and outlive its attempt's timeout; when it finally lands during a
+    // retry, the stale generation tells it to destroy itself instead of
+    // leaking, overwriting the newer attempt's WebView, or feeding stale
+    // tokens into the shared output queue. Written only inside the
+    // synchronized ensureReady; read on the main thread.
+    @Volatile private var attemptGeneration = 0
 
+    // Note: state == FAILED alone also shows the fallback label, even when
+    // no *move* fell back yet (e.g. the failure surfaced via analyze(),
+    // which never sets everFellBack) — a FAILED engine will serve every
+    // subsequent move from the fallback, so the label is already true.
     override val activeEngineLabel: String
-        get() = if (everFellBack || state == State.FAILED) "RaiEngine (fallback)" else "Stockfish"
-    // Set once the engine is torn down (fail/close). Guards the async
-    // createWebView post: if teardown wins the race, the freshly-built WebView
-    // is destroyed immediately instead of leaking.
+        get() = when {
+            state == State.READY && everFellBack -> "Stockfish (recovered)"
+            state == State.READY -> "Stockfish"
+            everFellBack || state == State.FAILED -> "RaiEngine (fallback)"
+            else -> "Stockfish"
+        }
+    // Set once the engine is permanently torn down — by close() ONLY. A
+    // failed init deliberately does not set this (fail() keeps the attempt
+    // retryable); stale-attempt cleanup is handled by attemptGeneration.
     @Volatile private var released = false
 
     private enum class State { UNINITIALIZED, READY, FAILED }
+
+    /** Kick the WebView/WASM init early so move one doesn't pay for it. */
+    override fun warmUp() {
+        try {
+            ensureReady()
+        } catch (e: Exception) {
+            // Best-effort by contract: same "must not break play" discipline
+            // as selectMove/analyze — the first real call retries/falls back
+            Log.w(TAG, "warmUp failed", e)
+        }
+    }
 
     // Not safe for concurrent callers: the clear()/send()/awaitToken() sequence
     // below shares one output queue, so overlapping selectMove calls would
@@ -78,7 +114,13 @@ class StockfishWasmEngine(
     // sequential coroutine (one move at a time), which this relies on.
     override fun selectMove(board: Board): Move? {
         return try {
-            if (!ensureReady()) return fallbackMove(board)
+            if (!ensureReady()) {
+                // Torn down (new game closed this instance): return null
+                // rather than burning a fallback search on a stale board —
+                // ensureReady's released-guard must not read as "failed"
+                if (released) return null
+                return fallbackMove(board, "engine unavailable (init failed)")
+            }
             // Closed during/just after init: bail before doing search work.
             if (released) return null
 
@@ -95,13 +137,13 @@ class StockfishWasmEngine(
                 // search against a board the ViewModel has likely replaced.
                 if (released) return null
                 Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
-                return fallbackMove(board)
+                return fallbackMove(board, "no bestmove within ${moveTimeMs + BESTMOVE_GRACE_MS}ms")
             }
-            parseUciBestMove(board, best) ?: fallbackMove(board)
+            parseUciBestMove(board, best) ?: fallbackMove(board, "unparseable bestmove: $best")
         } catch (e: Exception) {
             // Any failure (incl. thread interruption) must not break play
             Log.w(TAG, "selectMove failed; using RaiEngine fallback", e)
-            fallbackMove(board)
+            fallbackMove(board, "selectMove threw: ${e.javaClass.simpleName}")
         }
     }
 
@@ -114,7 +156,11 @@ class StockfishWasmEngine(
      */
     override fun analyze(board: Board, moveTimeMs: Long): PositionAnalysis? {
         return try {
-            if (!ensureReady()) return fallbackAnalysis(board, moveTimeMs)
+            if (!ensureReady()) {
+                // Same released-vs-failed distinction as selectMove
+                if (released) return null
+                return fallbackAnalysis(board, moveTimeMs)
+            }
             if (released) return null
 
             // Keep the interface's "never strength-limited" promise on play
@@ -191,7 +237,14 @@ class StockfishWasmEngine(
     }
 
     /** Serve a move from the RaiEngine fallback and remember that we did. */
-    private fun fallbackMove(board: Board): Move? {
+    private fun fallbackMove(board: Board, cause: String): Move? {
+        // Log the transition, not every fallback move: a whole game on the
+        // fallback would otherwise flood the ring buffer and push out the
+        // init-failure entries that actually explain it
+        if (!fallbackActive) {
+            EngineDiagnostics.record(appContext, "moves now served by RaiEngine: $cause")
+            fallbackActive = true
+        }
         everFellBack = true
         return fallback.selectMove(board)
     }
@@ -199,14 +252,35 @@ class StockfishWasmEngine(
     /** Build the WebView and complete the UCI handshake once. Thread-safe. */
     @Synchronized
     private fun ensureReady(): Boolean {
+        if (released) return false
         when (state) {
             State.READY -> return true
-            State.FAILED -> return false
+            State.FAILED -> {
+                // A transient failure (WebView provider updating, slow cold
+                // WASM compile) shouldn't downgrade the whole game to
+                // RaiEngine: retry on a later call before giving up for good
+                if (initAttempts >= MAX_INIT_ATTEMPTS) return false
+                state = State.UNINITIALIZED
+            }
             State.UNINITIALIZED -> Unit
         }
+        initAttempts++
+        val initStartedAt = SystemClock.elapsedRealtime()
+        // The retry runs on the SAME full budgets as the first attempt: it
+        // is the last chance before FAILED becomes permanent, and every
+        // budget guards one of the slow transient causes the retry exists
+        // to rescue (WebView provider updating lands in the init wait, the
+        // cold WASM compile in the uciok wait) — shrinking any of them
+        // makes the retry systematically worse at exactly its job. Known
+        // tradeoff: the one retried move can stall up to ~32s worst case,
+        // behind the visible "thinking…" state; in practice a failing step
+        // dies far sooner, and a second compile usually hits the WebView's
+        // code cache and is much faster than the first.
 
         output.clear()
-        mainHandler.post { createWebView() }
+        attemptGeneration++
+        val generation = attemptGeneration
+        mainHandler.post { createWebView(generation) }
 
         // engine.html calls AndroidEngine.onReady() once the worker is created
         val ready = awaitToken(INIT_TIMEOUT_MS) { it == READY_SENTINEL || it == ERROR_SENTINEL }
@@ -224,10 +298,25 @@ class StockfishWasmEngine(
         }
         send("setoption name Threads value 1")
         send("setoption name Hash value 16")
-        if (!isReady()) return fail("engine not ready after options")
+        // LONG budget here, not the 5s round-trip one: field logs showed
+        // devices failing "engine not ready after options" ~6s after game
+        // start — the JS wrapper answers uciok and the first readyok from
+        // its pre-init queue while the WASM compile is still running, so
+        // THIS isready is where the real compile wait actually surfaces.
+        if (!isReady(OPTIONS_READY_TIMEOUT_MS)) return fail("engine not ready after options")
 
         Log.i(TAG, "Stockfish WASM ready (targetElo band, movetime=${moveTimeMs}ms)")
         state = State.READY
+        fallbackActive = false
+        val elapsed = SystemClock.elapsedRealtime() - initStartedAt
+        EngineDiagnostics.record(
+            appContext,
+            if (initAttempts > 1 || everFellBack) {
+                "stockfish recovered (attempt $initAttempts, ${elapsed}ms)"
+            } else {
+                "stockfish ready (${elapsed}ms)"
+            }
+        )
         return true
     }
 
@@ -238,21 +327,39 @@ class StockfishWasmEngine(
         return isReady()
     }
 
-    private fun isReady(): Boolean {
+    private fun isReady(budgetMs: Long = HANDSHAKE_TIMEOUT_MS): Boolean {
         send("isready")
-        return awaitToken(HANDSHAKE_TIMEOUT_MS) { it == "readyok" } != null
+        return awaitToken(budgetMs) { it == "readyok" } != null
     }
 
+    /**
+     * Must only be called from inside [ensureReady]'s lock: the
+     * generation/attempt counters it mutates are unsynchronized fields
+     * whose safety depends entirely on that single-writer discipline.
+     */
     private fun fail(reason: String): Boolean {
         Log.w(TAG, "Stockfish unavailable ($reason); using RaiEngine fallback")
+        EngineDiagnostics.record(
+            appContext,
+            "stockfish init failed (attempt $initAttempts/$MAX_INIT_ATTEMPTS): $reason"
+        )
         state = State.FAILED
-        released = true
+        // Invalidate this attempt's in-flight createWebView post right away:
+        // without the bump, a construction that outlived this timeout could
+        // still go live before any retry re-bumps the generation
+        attemptGeneration++
+        // NOT `released = true`: released is close()'s permanent teardown
+        // signal, and a failed attempt must stay retryable (see ensureReady)
         destroyWebView()
         return false
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun createWebView() {
+    private fun createWebView(generation: Int) {
+        // Stale post: the attempt that queued this already timed out (or
+        // close() ran). Bail before doing any work — and never touch the
+        // shared output queue, which belongs to a newer attempt now.
+        if (released || generation != attemptGeneration) return
         // new WebView(...) can throw on devices where the WebView provider is
         // missing/updating/disabled. This runs on the main thread's loop, so
         // an uncaught throw here would crash the app rather than fall back —
@@ -271,7 +378,7 @@ class StockfishWasmEngine(
             // "no network, ever" guarantee robust regardless of the manifest.
             view.settings.blockNetworkLoads = true
             view.settings.allowFileAccess = false
-            view.addJavascriptInterface(Bridge(), "AndroidEngine")
+            view.addJavascriptInterface(Bridge(generation), "AndroidEngine")
             view.webViewClient = object : WebViewClientCompat() {
                 override fun shouldInterceptRequest(
                     view: WebView,
@@ -289,18 +396,22 @@ class StockfishWasmEngine(
                     return host != ASSET_HOST
                 }
             }
-            // If teardown already happened while this post was queued, don't
-            // leave a live WebView behind — destroy it, unblock any waiter, bail.
-            if (released) {
+            // Construction itself can stall past the attempt's timeout. If
+            // this attempt was failed (or the engine closed) meanwhile, a
+            // retry may already own the queue: destroy quietly — no queue
+            // signal, no webView overwrite, no leak.
+            if (released || generation != attemptGeneration) {
+                // No removeJavascriptInterface here (unlike destroyWebView):
+                // loadUrl was never called, so no JS ever saw the bridge
                 view.destroy()
-                output.offer(ERROR_SENTINEL)
                 return
             }
             webView = view
             view.loadUrl("https://$ASSET_HOST/assets/stockfish/engine.html")
         } catch (e: Throwable) {
             Log.w(TAG, "WebView construction failed", e)
-            output.offer(ERROR_SENTINEL)
+            // Only the attempt that owns the queue may fail it
+            if (generation == attemptGeneration) output.offer(ERROR_SENTINEL)
         }
     }
 
@@ -351,12 +462,31 @@ class StockfishWasmEngine(
         }
     }
 
-    private inner class Bridge {
-        @JavascriptInterface fun onReady() { output.offer(READY_SENTINEL) }
-        @JavascriptInterface fun onMessage(line: String) { output.offer(line.trim()) }
+    /**
+     * Generation-scoped like createWebView itself: teardown of an
+     * abandoned attempt's WebView is posted, not synchronous, so its JS
+     * side can fire a late callback in the window before that runs. A
+     * stale bridge must not write into the queue a newer attempt owns.
+     */
+    private inner class Bridge(private val generation: Int) {
+        private fun current() = generation == attemptGeneration
+
+        @JavascriptInterface fun onReady() {
+            if (current()) output.offer(READY_SENTINEL)
+        }
+
+        @JavascriptInterface fun onMessage(line: String) {
+            if (current()) output.offer(line.trim())
+        }
+
         @JavascriptInterface fun onError(message: String) {
             Log.w(TAG, "engine JS error: $message")
-            output.offer(ERROR_SENTINEL)
+            if (current()) {
+                // Into the persistent log too: a JS/WASM crash is otherwise
+                // indistinguishable from a timeout in the diagnostics
+                EngineDiagnostics.record(appContext, "engine JS error: ${message.take(200)}")
+                output.offer(ERROR_SENTINEL)
+            }
         }
     }
 
@@ -386,17 +516,26 @@ class StockfishWasmEngine(
         // is compiled, so this is fast on any device; keep it comfortably ample.
         private const val INIT_TIMEOUT_MS = 12000L
         // The cold WASM compile actually lands here: the worker only answers
-        // `uciok` once stockfish.js has loaded and instantiated the module, which
-        // can be several seconds on a low-end device on the first game after
-        // install. Too short silently, permanently downgrades the game to
-        // RaiEngine, so this initial handshake gets a generous budget.
-        private const val UCIOK_TIMEOUT_MS = 15000L
-        // Post-handshake readiness (`isready`/`readyok`): the module is already
-        // loaded by then, so these replies are fast.
+        // `uciok` once stockfish.js has loaded and instantiated the module,
+        // which can take a LONG time on a low-end device's first game after
+        // install (field reports of first-move fallbacks drove this up from
+        // 15s). Too short silently downgrades the game to RaiEngine; the
+        // wait overlaps the player's own first think via warmUp(), so a
+        // generous budget costs little.
+        private const val UCIOK_TIMEOUT_MS = 30000L
+        // Post-handshake readiness (`isready`/`readyok`) round-trips once
+        // the engine is genuinely up: fast.
         private const val HANDSHAKE_TIMEOUT_MS = 5000L
+        // The isready AFTER the option batch can sit behind the whole WASM
+        // compile on builds whose wrapper acks the handshake from a pre-init
+        // queue (observed in the field via EngineDiagnostics) — budget it
+        // like the compile, not like a round-trip.
+        private const val OPTIONS_READY_TIMEOUT_MS = 30000L
         private const val BESTMOVE_GRACE_MS = 4000L
         // Max blocking-poll granularity; bounds how long a wait can ignore a
         // teardown (released) signal.
         private const val POLL_SLICE_MS = 200L
+        // Total init tries before FAILED becomes permanent for this game.
+        private const val MAX_INIT_ATTEMPTS = 2
     }
 }
