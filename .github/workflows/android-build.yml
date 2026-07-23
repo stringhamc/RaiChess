@@ -10,9 +10,11 @@ on:
       - '**.xml'
       - '**.properties'
       - 'app/src/main/assets/**'
+      - 'app/src/main/cpp/**'
       - 'gradle/**'
       - 'gradlew'
       - 'gradlew.bat'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main, master, develop ]
     paths:
@@ -21,9 +23,11 @@ on:
       - '**.xml'
       - '**.properties'
       - 'app/src/main/assets/**'
+      - 'app/src/main/cpp/**'
       - 'gradle/**'
       - 'gradlew'
       - 'gradlew.bat'
+      - '.github/workflows/**'
 
 jobs:
   build:
@@ -52,6 +56,19 @@ jobs:
 
     - name: Build with Gradle
       run: ./gradlew assembleDebug --stacktrace
+
+    - name: Verify native Stockfish is packaged
+      run: |
+        APK=app/build/outputs/apk/debug/app-debug.apk
+        echo "APK native libs:"
+        unzip -l "$APK" | grep 'lib/' || true
+        for abi in arm64-v8a armeabi-v7a; do
+          if ! unzip -l "$APK" | grep -q "lib/$abi/libstockfish.so"; then
+            echo "::error::libstockfish.so missing for $abi — the executable-as-jniLib packaging broke"
+            exit 1
+          fi
+        done
+        echo "libstockfish.so present for all ABIs"
 
     - name: Run unit tests
       run: ./gradlew testDebugUnitTest --stacktrace

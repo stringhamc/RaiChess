@@ -21,6 +21,18 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Native Stockfish binary (see src/main/cpp/CMakeLists.txt). Real
+        // phones only — emulators/x86 fall back to the WASM backend.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
     }
 
     buildTypes {
@@ -53,6 +65,13 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            // Extract native libs to nativeLibraryDir instead of loading
+            // them from the APK: libstockfish.so is actually an executable
+            // that StockfishNativeEngine exec()s, which requires a real
+            // file on disk
+            useLegacyPackaging = true
         }
     }
 }
