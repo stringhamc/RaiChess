@@ -97,6 +97,11 @@ class StockfishWasmEngine(
 
     private enum class State { UNINITIALIZED, READY, FAILED }
 
+    /** Kick the WebView/WASM init early so move one doesn't pay for it. */
+    override fun warmUp() {
+        ensureReady()
+    }
+
     // Not safe for concurrent callers: the clear()/send()/awaitToken() sequence
     // below shares one output queue, so overlapping selectMove calls would
     // steal each other's engine lines. GameViewModel drives this from a single
@@ -495,11 +500,13 @@ class StockfishWasmEngine(
         // is compiled, so this is fast on any device; keep it comfortably ample.
         private const val INIT_TIMEOUT_MS = 12000L
         // The cold WASM compile actually lands here: the worker only answers
-        // `uciok` once stockfish.js has loaded and instantiated the module, which
-        // can be several seconds on a low-end device on the first game after
-        // install. Too short silently, permanently downgrades the game to
-        // RaiEngine, so this initial handshake gets a generous budget.
-        private const val UCIOK_TIMEOUT_MS = 15000L
+        // `uciok` once stockfish.js has loaded and instantiated the module,
+        // which can take a LONG time on a low-end device's first game after
+        // install (field reports of first-move fallbacks drove this up from
+        // 15s). Too short silently downgrades the game to RaiEngine; the
+        // wait overlaps the player's own first think via warmUp(), so a
+        // generous budget costs little.
+        private const val UCIOK_TIMEOUT_MS = 30000L
         // Post-handshake readiness (`isready`/`readyok`): the module is already
         // loaded by then, so these replies are fast.
         private const val HANDSHAKE_TIMEOUT_MS = 5000L

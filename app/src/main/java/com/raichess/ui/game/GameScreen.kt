@@ -90,8 +90,20 @@ fun GameScreen(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
+        // While the opponent thinks (or the engine warms up on move one),
+        // rotate light chatter so a long wait feels alive, not frozen
+        var thinkingTick by remember { mutableStateOf(0) }
+        LaunchedEffect(state.isAiThinking) {
+            thinkingTick = 0
+            if (state.isAiThinking) {
+                while (true) {
+                    kotlinx.coroutines.delay(CHATTER_INTERVAL_MS)
+                    thinkingTick++
+                }
+            }
+        }
         Text(
-            text = statusText(state),
+            text = statusText(state, thinkingTick),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.padding(vertical = 6.dp)
@@ -519,7 +531,24 @@ private fun findKingSquare(squares: List<Char?>, playerColor: PlayerColor): Int?
     return if (index >= 0) index else null
 }
 
-private fun statusText(state: GameUiState): String {
+private const val CHATTER_INTERVAL_MS = 4000L
+
+/**
+ * Rotating small talk for long thinks — the first slot stays the honest
+ * "X is thinking…", then generic musings cycle so a slow search (or the
+ * engine's first-move warm-up) reads as alive rather than frozen.
+ */
+private val thinkingChatter = listOf(
+    "Hmm, interesting position…",
+    "Weighing every capture…",
+    "Checking the sharp lines…",
+    "Counting the pawns again…",
+    "That move made me think…",
+    "Looking one move deeper…",
+    "Almost decided…"
+)
+
+private fun statusText(state: GameUiState, thinkingTick: Int = 0): String {
     val moveNumber = state.moveHistorySan.size / 2 + 1
     return when {
         state.ending != null -> when (state.ending) {
@@ -531,7 +560,14 @@ private fun statusText(state: GameUiState): String {
             GameEnding.RESIGNED ->
                 "You resigned." + eloDeltaText(state) + lossEncouragement()
         }
-        state.isAiThinking -> "Move $moveNumber · ${state.engineLabel} is thinking…"
+        state.isAiThinking -> {
+            val line = if (thinkingTick == 0) {
+                "${state.engineLabel} is thinking…"
+            } else {
+                thinkingChatter[(thinkingTick - 1) % thinkingChatter.size]
+            }
+            "Move $moveNumber · $line"
+        }
         state.isPlayerInCheck -> "Move $moveNumber · Check!"
         state.isPlayerTurn -> "Move $moveNumber · Your move"
         else -> ""

@@ -54,6 +54,14 @@ interface ChessEngine {
      */
     val activeEngineLabel: String
 
+    /**
+     * Optionally start any slow initialization (e.g. a WASM compile) ahead
+     * of the first [selectMove], so it overlaps the player's own first
+     * think instead of stalling move one. Same threading contract as
+     * [selectMove] — call under the same serialization. No-op by default.
+     */
+    fun warmUp() {}
+
     /** Release any held resources (e.g. a WebView). No-op by default. */
     fun close() {}
 }

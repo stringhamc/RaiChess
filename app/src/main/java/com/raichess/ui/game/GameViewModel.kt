@@ -209,6 +209,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             newEngine
         }
+        // Start the slow WASM init now, overlapping the player's own first
+        // think, so move one doesn't stall (or worse, time out into the
+        // fallback) waiting for the cold compile. engineLock keeps this
+        // serialized with the first real engine call; if the AI moves
+        // first, whichever acquires the lock first performs the init.
+        viewModelScope.launch(Dispatchers.Default) {
+            engineLock.withLock { newEngine.warmUp() }
+        }
         gameRecorded = false
         gameId++
         gameUndoCount = 0
