@@ -10,9 +10,11 @@ on:
       - '**.xml'
       - '**.properties'
       - 'app/src/main/assets/**'
+      - 'app/src/main/cpp/**'
       - 'gradle/**'
       - 'gradlew'
       - 'gradlew.bat'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main, master, develop ]
     paths:
@@ -21,9 +23,11 @@ on:
       - '**.xml'
       - '**.properties'
       - 'app/src/main/assets/**'
+      - 'app/src/main/cpp/**'
       - 'gradle/**'
       - 'gradlew'
       - 'gradlew.bat'
+      - '.github/workflows/**'
 
 jobs:
   build:

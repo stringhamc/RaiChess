@@ -24,16 +24,20 @@ object EngineFactory {
 
     fun create(context: Context, targetElo: Int): ChessEngine {
         val stockfish = usesStockfish(targetElo)
+        val native = stockfish && StockfishNativeEngine.isAvailable(context)
         // Game-start header in the engine log: frames any fallback events
-        // that follow (and makes "1350 → Stockfish" band routing visible)
-        EngineDiagnostics.record(
-            context,
-            "game start: targetElo $targetElo → ${if (stockfish) "Stockfish" else "RaiEngine band"}"
-        )
-        return if (stockfish) {
-            StockfishWasmEngine(context, targetElo, fallback = RaiEngine(targetElo))
-        } else {
-            RaiEngine(targetElo)
+        // that follow, and makes both the band routing and the chosen
+        // backend (native binary vs WASM) visible
+        val backend = when {
+            !stockfish -> "RaiEngine band"
+            native -> "Stockfish (native)"
+            else -> "Stockfish (wasm)"
+        }
+        EngineDiagnostics.record(context, "game start: targetElo $targetElo → $backend")
+        return when {
+            !stockfish -> RaiEngine(targetElo)
+            native -> StockfishNativeEngine(context, targetElo, fallback = RaiEngine(targetElo))
+            else -> StockfishWasmEngine(context, targetElo, fallback = RaiEngine(targetElo))
         }
     }
 
@@ -44,10 +48,19 @@ object EngineFactory {
      * and must [ChessEngine.close] it when the analysis run is done.
      */
     fun createAnalyzer(context: Context): ChessEngine =
-        StockfishWasmEngine(
-            context,
-            targetElo = RaiEngine.MAX_ELO,
-            fallback = RaiEngine(RaiEngine.MAX_ELO),
-            analysisMode = true
-        )
+        if (StockfishNativeEngine.isAvailable(context)) {
+            StockfishNativeEngine(
+                context,
+                targetElo = RaiEngine.MAX_ELO,
+                fallback = RaiEngine(RaiEngine.MAX_ELO),
+                analysisMode = true
+            )
+        } else {
+            StockfishWasmEngine(
+                context,
+                targetElo = RaiEngine.MAX_ELO,
+                fallback = RaiEngine(RaiEngine.MAX_ELO),
+                analysisMode = true
+            )
+        }
 }
