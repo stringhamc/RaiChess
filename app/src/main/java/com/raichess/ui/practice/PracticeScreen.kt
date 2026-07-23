@@ -48,7 +48,7 @@ fun PracticeScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Source selector: Mixed / My mistakes / Puzzles
+        // Source selector: Mixed / Mistakes / Puzzles / Lesson
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -56,11 +56,14 @@ fun PracticeScreen(
             SourceChip("Mixed", state.source == DrillSelector.Source.MIXED) {
                 onSourceChanged(DrillSelector.Source.MIXED)
             }
-            SourceChip("My mistakes", state.source == DrillSelector.Source.MISTAKES) {
+            SourceChip("Mistakes", state.source == DrillSelector.Source.MISTAKES) {
                 onSourceChanged(DrillSelector.Source.MISTAKES)
             }
             SourceChip("Puzzles", state.source == DrillSelector.Source.PUZZLES) {
                 onSourceChanged(DrillSelector.Source.PUZZLES)
+            }
+            SourceChip("Lesson", state.source == DrillSelector.Source.LESSON) {
+                onSourceChanged(DrillSelector.Source.LESSON)
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
@@ -78,10 +81,12 @@ fun PracticeScreen(
             state.queueEmpty -> {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = if (state.source == DrillSelector.Source.MISTAKES) {
-                        "No analyzed mistakes to drill yet — play some Training games first."
-                    } else {
-                        "Nothing to practice right now."
+                    text = when {
+                        state.lessonComplete ->
+                            "Lesson plan complete! New lessons grow as you play more games."
+                        state.source == DrillSelector.Source.MISTAKES ->
+                            "No analyzed mistakes to drill yet — play some Training games first."
+                        else -> "Nothing to practice right now."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.secondary,
@@ -89,6 +94,22 @@ fun PracticeScreen(
                 )
             }
             else -> {
+                // Lesson header: the unit being worked plus plan progress
+                state.lessonTitle?.let { title ->
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    state.lessonProgressText?.let { progressText ->
+                        Text(
+                            text = progressText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
                 Text(
                     text = state.sourceLabel,
                     style = MaterialTheme.typography.labelMedium,
