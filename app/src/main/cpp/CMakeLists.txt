@@ -42,7 +42,12 @@ add_executable(stockfish ${SF_SOURCES})
 # gets a runnable binary into nativeLibraryDir
 set_target_properties(stockfish PROPERTIES OUTPUT_NAME "libstockfish.so")
 
-target_compile_features(stockfish PRIVATE cxx_std_17)
+# C++11, NOT the NDK's default gnu++17: SF11 predates std::clamp and
+# defines its own, which is ambiguous under C++17
+set_target_properties(stockfish PROPERTIES
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED ON
+)
 # USE_POPCNT maps to compiler builtins on every NDK target; IS_64BIT only
 # where true (Stockfish's own Makefile does the same per-arch split)
 target_compile_options(stockfish PRIVATE -O3 -DNDEBUG -DUSE_POPCNT -Wno-deprecated-declarations)
