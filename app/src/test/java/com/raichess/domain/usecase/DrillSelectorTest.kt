@@ -167,6 +167,57 @@ class DrillSelectorTest {
     }
 
     @Test
+    fun `lesson queue keeps only lesson-themed puzzles and matching mistakes`() {
+        val lesson = LessonPlanner.Lesson(
+            id = "weakness:hanging_piece",
+            title = "Stop hanging pieces",
+            description = "",
+            themes = setOf("hangingPiece"),
+            weaknessTheme = ThemeTag.HANGING_PIECE
+        )
+        val otherMistake = DrillSelector.MistakeDrill(
+            id = "mistake:2:4", fen = "f", bestMoveLan = "e2e4", playedLan = "a2a3",
+            themes = setOf(ThemeTag.MISSED_MATE)
+        )
+        val queue = DrillSelector.buildLessonQueue(
+            lesson = lesson,
+            mistakes = listOf(mistake("mistake:1:1"), otherMistake),
+            puzzles = listOf(
+                puzzle("hang", 800, "hangingPiece"),
+                puzzle("mate", 820, "mateIn1")
+            ),
+            progressById = emptyMap(),
+            targetRating = 800,
+            nowMs = now
+        )
+        val puzzleIds = queue.mapNotNull { it.puzzle?.id }
+        val mistakeIds = queue.mapNotNull { it.mistake?.id }
+        assertEquals(listOf("hang"), puzzleIds)
+        assertEquals(listOf("mistake:1:1"), mistakeIds)
+    }
+
+    @Test
+    fun `lesson window skews upward around the target rating`() {
+        val lesson = LessonPlanner.Lesson(
+            id = "core:tactics", title = "t", description = "",
+            themes = setOf("fork")
+        )
+        val queue = DrillSelector.buildLessonQueue(
+            lesson = lesson,
+            mistakes = emptyList(),
+            puzzles = listOf(
+                puzzle("wayBelow", 500, "fork"),
+                puzzle("stretch", 1150, "fork")
+            ),
+            progressById = emptyMap(),
+            targetRating = 800,
+            nowMs = now
+        )
+        // -300 is outside the (-150, +400) lesson window; +350 is inside
+        assertEquals(listOf("stretch"), queue.mapNotNull { it.puzzle?.id })
+    }
+
+    @Test
     fun `equal-priority queues are seed-stable but vary between sessions`() {
         val puzzles = ('a'..'h').map { puzzle("$it", 800, "theme-$it") }
         fun queueAt(seedMs: Long) = DrillSelector.buildQueue(

@@ -9,9 +9,9 @@ import kotlin.math.max
 enum class MoveClassification {
     /** The engine's own first choice. */
     BEST,
-    /** Within 0.3 pawns of best. */
+    /** Within 0.6 pawns of best. */
     GOOD,
-    /** 0.3–1.0 pawn loss. */
+    /** 0.6–1.0 pawn loss. */
     INACCURACY,
     /** 1.0–3.0 pawn loss. */
     MISTAKE,
@@ -30,7 +30,11 @@ object MoveClassifier {
     /** Mate scores and runaway evals are clamped to ±this before loss math. */
     const val EVAL_CAP_CP = 1000
 
-    private const val INACCURACY_THRESHOLD_CP = 30
+    // Raised from 30 on field feedback: a move within ~half a pawn of the
+    // engine's choice is close to the same score — often within the noise
+    // of the coach's short searches — and flagging it read as nagging.
+    // "Inaccuracy" now starts where the loss is unambiguous.
+    private const val INACCURACY_THRESHOLD_CP = 60
 
     /** Public: ThemeTagger and the weakness profile gate on mistake-or-worse. */
     const val MISTAKE_THRESHOLD_CP = 100

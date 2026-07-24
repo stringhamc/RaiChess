@@ -16,9 +16,9 @@ class MoveClassifierTest {
     fun `classification thresholds match the technical plan`() {
         // Good: within 0.3 pawns of best
         assertEquals(MoveClassification.GOOD, MoveClassifier.classify(0, playedEngineBest = false))
-        assertEquals(MoveClassification.GOOD, MoveClassifier.classify(29, playedEngineBest = false))
+        assertEquals(MoveClassification.GOOD, MoveClassifier.classify(59, playedEngineBest = false))
         // Inaccuracy: 0.3-1.0 pawn loss
-        assertEquals(MoveClassification.INACCURACY, MoveClassifier.classify(30, playedEngineBest = false))
+        assertEquals(MoveClassification.INACCURACY, MoveClassifier.classify(60, playedEngineBest = false))
         assertEquals(MoveClassification.INACCURACY, MoveClassifier.classify(99, playedEngineBest = false))
         // Mistake: 1.0-3.0 pawn loss
         assertEquals(MoveClassification.MISTAKE, MoveClassifier.classify(100, playedEngineBest = false))

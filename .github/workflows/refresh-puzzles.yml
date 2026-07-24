@@ -1,0 +1,47 @@
+name: Refresh Puzzles
+
+# Manually dispatched: regenerates app/src/main/assets/puzzles/puzzles.csv
+# from the real Lichess puzzle database (CC0) and commits the result to
+# the branch this run is dispatched on. The next Android Build run's
+# PuzzleAssetTest then replays every committed row for legality, so a bad
+# sample can never reach a release unchecked.
+on:
+  workflow_dispatch:
+    inputs:
+      per_bucket:
+        description: Max puzzles per rating-band x theme bucket
+        required: false
+        default: '20'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install zstandard
+
+      - name: Generate puzzle asset
+        run: python3 tools/fetch_lichess_puzzles.py --per-bucket "${{ github.event.inputs.per_bucket }}"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/puzzles/puzzles.csv
+          if git diff --cached --quiet; then
+            echo "Asset unchanged — nothing to commit"
+            exit 0
+          fi
+          git commit -m "chore: refresh bundled puzzles from the Lichess database (CC0)"
+          git push

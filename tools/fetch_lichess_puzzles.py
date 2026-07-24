@@ -46,6 +46,8 @@ THEMES = [
     "deflection", "attraction", "sacrifice", "clearance", "doubleCheck",
     "trappedPiece", "xRayAttack", "zugzwang", "quietMove", "defensiveMove",
     "intermezzo", "exposedKing", "kingsideAttack", "capturingDefender",
+    # Phase tags, so the lesson plan's opening/middlegame units have material
+    "opening", "middlegame",
 ]
 BANDS = [(lo, lo + 200) for lo in range(400, 2600, 200)]
 HEADER = ["PuzzleId", "FEN", "Moves", "Rating", "RatingDeviation",

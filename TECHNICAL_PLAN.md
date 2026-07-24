@@ -398,8 +398,9 @@ class EloCalculator {
    - Calculate centipawn loss
    - Classify move quality:
      - **Brilliant:** Best move in complex position
-     - **Good:** Within 0.3 pawn advantage of best
-     - **Inaccuracy:** 0.3-1.0 pawn loss
+     - **Good:** Within 0.6 pawn advantage of best (raised from 0.3 on
+       field feedback: near-equal moves read as nagging when flagged)
+     - **Inaccuracy:** 0.6-1.0 pawn loss
      - **Mistake:** 1.0-3.0 pawn loss
      - **Blunder:** 3.0+ pawn loss
 
