@@ -69,7 +69,8 @@ class PlayerProfileRepository(context: Context) {
             currentElo = stats.currentElo,
             opponentElo = opponentElo,
             result = result,
-            moveAccuracy = moveAccuracy
+            moveAccuracy = moveAccuracy,
+            gamesPlayed = stats.gamesPlayed
         )
         val delta = newElo - stats.currentElo
         val updated = stats.withGameResult(newElo, result)

@@ -6,10 +6,27 @@ package com.raichess.domain.model
  */
 object EloCalculator {
 
-    const val K_FACTOR = 32 // Standard K-factor for rating changes
+    const val K_FACTOR = 32 // Standard K-factor for established ratings
     const val DEFAULT_STARTING_ELO = 600 // beginner-friendly start; rating climbs with wins
     const val MIN_ELO = 400
     const val MAX_ELO = 3000
+
+    // Provisional K-factors: a fresh rating is a guess, so early results
+    // move it fast (field feedback: repeatedly beating a much stronger
+    // opponent at fixed K=32 crawled up +30 per win — a player stuck far
+    // below their level for dozens of games). Mirrors FIDE/online-site
+    // practice of large K until a rating has evidence behind it.
+    const val K_FACTOR_NEW = 80
+    const val K_FACTOR_DEVELOPING = 48
+    const val PROVISIONAL_GAMES = 10
+    const val DEVELOPING_GAMES = 20
+
+    /** K for a player with this many completed games. */
+    fun kFactorFor(gamesPlayed: Int): Int = when {
+        gamesPlayed < PROVISIONAL_GAMES -> K_FACTOR_NEW
+        gamesPlayed < DEVELOPING_GAMES -> K_FACTOR_DEVELOPING
+        else -> K_FACTOR
+    }
 
     /**
      * Calculate new ELO rating after a game
@@ -18,13 +35,16 @@ object EloCalculator {
      * @param opponentElo Opponent's ELO rating (Stockfish configured ELO)
      * @param result Game result from player's perspective
      * @param moveAccuracy Player's move accuracy percentage (0.0 - 100.0)
+     * @param gamesPlayed Completed games before this one; drives the
+     *   provisional K (defaults to an established rating's K)
      * @return New ELO rating
      */
     fun calculateNewElo(
         currentElo: Int,
         opponentElo: Int,
         result: GameResult,
-        moveAccuracy: Double
+        moveAccuracy: Double,
+        gamesPlayed: Int = DEVELOPING_GAMES
     ): Int {
         // Expected score using standard ELO formula
         val expectedScore = calculateExpectedScore(currentElo, opponentElo)
@@ -44,7 +64,8 @@ object EloCalculator {
         val adjustedActualScore = (actualScore + accuracyBonus * 0.3).coerceIn(0.0, 1.0)
 
         // Calculate rating change
-        val ratingChange = (K_FACTOR * (adjustedActualScore - expectedScore)).toInt()
+        val ratingChange =
+            (kFactorFor(gamesPlayed) * (adjustedActualScore - expectedScore)).toInt()
 
         // Apply change and clamp to valid range
         return (currentElo + ratingChange).coerceIn(MIN_ELO, MAX_ELO)

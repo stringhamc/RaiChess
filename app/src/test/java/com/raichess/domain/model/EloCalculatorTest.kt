@@ -125,6 +125,29 @@ class EloCalculatorTest {
     }
 
     @org.junit.Test
+    fun `provisional ratings move fast and settle down`() {
+        assertEquals(EloCalculator.K_FACTOR_NEW, EloCalculator.kFactorFor(0))
+        assertEquals(
+            EloCalculator.K_FACTOR_NEW,
+            EloCalculator.kFactorFor(EloCalculator.PROVISIONAL_GAMES - 1)
+        )
+        assertEquals(
+            EloCalculator.K_FACTOR_DEVELOPING,
+            EloCalculator.kFactorFor(EloCalculator.PROVISIONAL_GAMES)
+        )
+        assertEquals(
+            EloCalculator.K_FACTOR,
+            EloCalculator.kFactorFor(EloCalculator.DEVELOPING_GAMES)
+        )
+        // A fresh 600 beating an 1100: +75 provisional, not K=32's +30
+        val newElo = EloCalculator.calculateNewElo(
+            currentElo = 600, opponentElo = 1100,
+            result = GameResult.WIN, moveAccuracy = 50.0, gamesPlayed = 0
+        )
+        assertEquals(675, newElo)
+    }
+
+    @org.junit.Test
     fun `win streak increments on wins, holds on draws, resets on losses`() {
         val stats = EloStats(
             currentElo = 1200, peakElo = 1200, gamesPlayed = 0,
