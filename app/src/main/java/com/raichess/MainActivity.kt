@@ -165,7 +165,12 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                 onOpponentEloChanged = viewModel::setOpponentElo,
                 onPlayerColorChanged = viewModel::setPlayerColor,
                 onGameModeChanged = viewModel::setGameMode,
-                onStartGame = viewModel::startGame,
+                // Close the setup screen as the game starts: post-game
+                // "New Game" then lands on home, never back on this form
+                onStartGame = { random ->
+                    showPlaySetup = false
+                    viewModel.startGame(random)
+                },
                 onBack = { showPlaySetup = false }
             )
         } else {
