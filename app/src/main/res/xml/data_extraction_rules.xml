@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Backup rules for Android 12+ (dataExtractionRules) -->
+<!-- Backup rules for Android 12+ (dataExtractionRules). Same include-all
+     rationale as backup_rules.xml: game history and all progress must
+     survive cloud restore and device-to-device transfer. -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Back up the player profile (ELO rating and game record) -->
-        <include domain="sharedpref" path="raichess_profile.xml" />
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="." />
     </cloud-backup>
     <device-transfer>
-        <include domain="sharedpref" path="raichess_profile.xml" />
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="." />
     </device-transfer>
 </data-extraction-rules>

@@ -20,6 +20,7 @@ import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.SettingsRepository
 import com.raichess.domain.model.CompletedGame
+import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
@@ -779,9 +780,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val previousPeak = state.playerStats?.peakElo
         val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy)
         persistFinishedGame(state, result, eloAfter = stats.currentElo, eloDelta = delta)
+        // Calibration: while the rating is provisional (and moving fast,
+        // see EloCalculator's K bands), the next opponent auto-tracks it —
+        // beat a bot and the next one is stronger, without touching the
+        // slider. After calibration the player's chosen setting sticks.
+        val nextOpponentElo = if (stats.gamesPlayed < EloCalculator.PROVISIONAL_GAMES) {
+            EloConfiguration.getRecommendedOpponentElo(stats.currentElo)
+        } else {
+            state.opponentElo
+        }
         _uiState.value = state.copy(
             phase = GamePhase.GAME_OVER,
             playerStats = stats,
+            opponentElo = nextOpponentElo,
             isAiThinking = false,
             isPlayerTurn = false,
             ending = ending,

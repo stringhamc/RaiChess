@@ -87,6 +87,15 @@ class RaiEngineTest {
         assertTrue(RaiEngine(450).blunderChance >= 0.5)
     }
 
+    @org.junit.Test
+    fun `mid band is credibly strong after the recalibration`() {
+        // Field feedback: "1100" lost to a ~600 player. It now searches
+        // 3 plies and rolls a random move at most 5% of the time.
+        assertEquals(3, RaiEngine(1100).searchDepth)
+        assertTrue(RaiEngine(1100).blunderChance <= 0.05)
+        assertTrue(RaiEngine(1000).blunderChance <= 0.10)
+    }
+
     @Test
     fun `weak engine deviates from the best move on some seeds`() {
         // Hanging queen: the objectively best move is c4xd5. An 800-ELO

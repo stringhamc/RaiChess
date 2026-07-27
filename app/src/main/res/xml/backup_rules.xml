@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Backup rules for Android 11 and below (fullBackupContent) -->
+<!-- Backup rules for Android 11 and below (fullBackupContent).
+     An explicit include list EXCLUDES everything unlisted, so every store
+     of user progress must appear here: the Room database (game history +
+     analysis + practice progress) and all SharedPreferences (profile,
+     practice rating, lesson progress, settings). -->
 <full-backup-content>
-    <!-- Back up the player profile (ELO rating and game record) -->
-    <include domain="sharedpref" path="raichess_profile.xml" />
+    <include domain="database" path="." />
+    <include domain="sharedpref" path="." />
 </full-backup-content>

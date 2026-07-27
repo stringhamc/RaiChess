@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.data.database.AnalysisState
 import com.raichess.data.database.PositionEntity
 import com.raichess.data.repository.GameRepository
@@ -68,16 +69,32 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         load()
     }
 
-    private fun load() {
+    /**
+     * Load a specific game's review, or the most recent analyzed game when
+     * [gameId] is null. Public and re-callable: the screen reloads on every
+     * entry (the Activity-scoped ViewModel used to load once in init and
+     * then showed a stale game forever after new games were played).
+     */
+    fun load(gameId: Long? = null) {
+        _uiState.value = ReviewUiState()
         viewModelScope.launch {
             try {
-                val recent = gameRepository.recentGames(20)
-                val game = recent.firstOrNull { it.analysisState == AnalysisState.DONE }
-                if (game == null) {
+                val game = if (gameId != null) {
+                    gameRepository.getGame(gameId)
+                } else {
+                    gameRepository.recentGames(20)
+                        .firstOrNull { it.analysisState == AnalysisState.DONE }
+                }
+                if (game == null || game.analysisState != AnalysisState.DONE) {
+                    // Nudge the background analyzer: if this game's analysis
+                    // was interrupted (app killed mid-sweep), this is what
+                    // finishes it so the next visit has the full review
+                    AnalysisCoordinator.analyzePendingGames(getApplication())
+                    val anyGames = game != null || gameRepository.recentGames(1).isNotEmpty()
                     _uiState.value = ReviewUiState(
                         loading = false,
-                        noGames = recent.isEmpty(),
-                        analysisPending = recent.isNotEmpty()
+                        noGames = !anyGames,
+                        analysisPending = anyGames
                     )
                     return@launch
                 }

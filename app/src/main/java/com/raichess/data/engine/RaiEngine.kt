@@ -40,32 +40,36 @@ class RaiEngine(
 
     override val activeEngineLabel: String get() = "RaiEngine"
 
+    // Curve recalibrated on field feedback: the original mapping made the
+    // upper bands far weaker than their labels (an "1100" playing a purely
+    // random move every fifth turn on a 2-ply search was crushed by a
+    // ~600-rated player). Labels remain heuristic, but the mid band now
+    // searches deeper, blunders far less, and picks closer to the best.
+
     /** Full-move search depth in plies. */
     val searchDepth: Int = when {
-        elo < 1000 -> 1
-        elo < 1400 -> 2
-        elo < 2000 -> 3
+        elo < 800 -> 1
+        elo < 1100 -> 2
+        elo < 1800 -> 3
         else -> 4
     }
 
     /** Probability of playing a completely random legal move. */
     val blunderChance: Double = when {
-        elo < 500 -> 0.60   // near-random beginner bot
-        elo < 700 -> 0.42
-        elo < 1000 -> 0.30
-        elo < 1200 -> 0.20
-        elo < 1400 -> 0.12
-        elo < 1600 -> 0.07
-        elo < 1800 -> 0.04
-        elo < 2000 -> 0.02
+        elo < 500 -> 0.50   // near-random beginner bot
+        elo < 700 -> 0.30
+        elo < 900 -> 0.18
+        elo < 1100 -> 0.10
+        elo < 1300 -> 0.05
+        elo < 1600 -> 0.02
         else -> 0.0
     }
 
     /** Moves within this many centipawns of the best are candidates at lower ELOs. */
     private val candidateWindow: Int = when {
         elo < 700 -> 200
-        elo < 1200 -> 120
-        elo < 1600 -> 60
+        elo < 1000 -> 120
+        elo < 1400 -> 60
         elo < 2000 -> 25
         else -> 0
     }
