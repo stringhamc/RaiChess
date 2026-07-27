@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import com.raichess.BuildConfig
 import com.raichess.data.diagnostics.EngineDiagnostics
 import com.raichess.data.engine.RaiEngine
+import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.PlayerColor
@@ -186,6 +187,19 @@ fun HomeScreen(
                 TickLabel("${RaiEngine.MIN_ELO}")
                 TickLabel("1600")
                 TickLabel("${RaiEngine.MAX_ELO}")
+            }
+            // During placement the opponent auto-tracks the fast-moving
+            // provisional rating after each game (manual picks still apply
+            // to the next game only)
+            if (stats != null && stats.gamesPlayed < EloCalculator.PROVISIONAL_GAMES) {
+                Text(
+                    text = "Calibrating (game ${stats.gamesPlayed + 1} of " +
+                        "${EloCalculator.PROVISIONAL_GAMES}): the opponent adapts " +
+                        "to your results",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
             }
         }
 
