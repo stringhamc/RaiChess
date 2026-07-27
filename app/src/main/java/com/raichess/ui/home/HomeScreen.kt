@@ -147,7 +147,7 @@ fun HomeScreen(
             )
             Text(
                 text = if (gameMode == GameMode.TRAINING) {
-                    "Undo allowed — undos are tracked and reduce ELO gains"
+                    "Undo and hints allowed — each use shrinks ELO gains"
                 } else {
                     "No takebacks — full ELO stakes"
                 },
