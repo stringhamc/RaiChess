@@ -20,6 +20,7 @@ import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.SettingsRepository
 import com.raichess.domain.model.CompletedGame
+import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
