@@ -258,7 +258,7 @@ fun HomeScreen(
             onClick = onReview,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Review Last Game")
+            Text("Games & Review")
         }
 
         Spacer(modifier = Modifier.height(20.dp))

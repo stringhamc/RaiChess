@@ -15,9 +15,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raichess.data.analysis.AnalysisCoordinator
+import androidx.compose.runtime.LaunchedEffect
 import com.raichess.ui.game.GamePhase
 import com.raichess.ui.game.GameScreen
 import com.raichess.ui.game.GameViewModel
+import com.raichess.ui.games.GamesScreen
+import com.raichess.ui.games.GamesViewModel
 import com.raichess.ui.home.HomeScreen
 import com.raichess.ui.practice.PracticeScreen
 import com.raichess.ui.practice.PracticeViewModel
@@ -54,16 +57,33 @@ class MainActivity : ComponentActivity() {
 fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     var showPractice by rememberSaveable { mutableStateOf(false) }
-    var showReview by rememberSaveable { mutableStateOf(false) }
+    var showGames by rememberSaveable { mutableStateOf(false) }
+    // -1 = no game open; rememberSaveable needs a non-null primitive
+    var reviewGameId by rememberSaveable { mutableStateOf(-1L) }
 
-    if (showReview) {
+    if (reviewGameId >= 0) {
         val reviewViewModel: ReviewViewModel = viewModel()
         val reviewState by reviewViewModel.uiState.collectAsState()
+        // Reload on every entry and id change: the Activity-scoped
+        // ViewModel would otherwise keep showing a previously loaded game
+        LaunchedEffect(reviewGameId) { reviewViewModel.load(reviewGameId) }
         ReviewScreen(
             state = reviewState,
             onPrevious = reviewViewModel::previous,
             onNext = reviewViewModel::next,
-            onBack = { showReview = false }
+            onBack = { reviewGameId = -1L }
+        )
+        return
+    }
+
+    if (showGames) {
+        val gamesViewModel: GamesViewModel = viewModel()
+        val gamesState by gamesViewModel.uiState.collectAsState()
+        LaunchedEffect(Unit) { gamesViewModel.refresh() }
+        GamesScreen(
+            state = gamesState,
+            onOpenGame = { reviewGameId = it },
+            onBack = { showGames = false }
         )
         return
     }
@@ -94,7 +114,7 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             onAnimationsChanged = viewModel::setAnimationsEnabled,
             onStartGame = viewModel::startGame,
             onPractice = { showPractice = true },
-            onReview = { showReview = true }
+            onReview = { showGames = true }
         )
 
         GamePhase.PLAYING, GamePhase.GAME_OVER -> GameScreen(
