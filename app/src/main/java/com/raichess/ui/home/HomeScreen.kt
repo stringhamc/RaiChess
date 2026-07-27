@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.raichess.BuildConfig
 import com.raichess.domain.model.EloStats
+import com.raichess.domain.model.GameMode
 import com.raichess.ui.components.RaiLogo
 import com.raichess.ui.components.SectionLabel
 import com.raichess.ui.theme.ChessColors
@@ -33,15 +34,21 @@ import com.raichess.ui.theme.ChessColors
 /**
  * Home launcher: brand lockup, rating hero, and a quad of destination
  * tiles (Play / Train / Coach / Review) with a Settings row beneath.
- * Game setup lives in PlaySetupScreen; toggles and diagnostics live in
- * SettingsScreen — home stays minimal on purpose.
+ * The Play tile starts a game immediately with the current setup (shown
+ * in its subtitle); its corner "custom" button opens PlaySetupScreen.
+ * Toggles and diagnostics live in SettingsScreen — home stays minimal
+ * on purpose.
  */
 @Composable
 fun HomeScreen(
     stats: EloStats?,
     /** Coach tile subtitle — the coach's current headline, when loaded. */
     coachLine: String?,
+    /** Current setup, shown on the Play tile so one-tap play is no surprise. */
+    opponentElo: Int,
+    gameMode: GameMode,
     onPlay: () -> Unit,
+    onCustomizeGame: () -> Unit,
     onTrain: () -> Unit,
     onCoach: () -> Unit,
     onReview: () -> Unit,
@@ -111,8 +118,11 @@ fun HomeScreen(
             HomeTile(
                 glyph = "♟",
                 title = "Play",
-                subtitle = "A game at your level",
+                subtitle = "vs $opponentElo · " +
+                    if (gameMode == GameMode.TRAINING) "Training" else "Rated",
                 onClick = onPlay,
+                cornerLabel = "CUSTOM",
+                onCornerClick = onCustomizeGame,
                 modifier = Modifier.weight(1f)
             )
             HomeTile(
@@ -160,14 +170,20 @@ fun HomeScreen(
     }
 }
 
-/** One square destination tile: big glyph, title, short subtitle. */
+/**
+ * One square destination tile: big glyph, title, short subtitle. The
+ * optional corner label is a small secondary action (its own tap target,
+ * nested inside the tile's) — used by Play for "customize this game".
+ */
 @Composable
 private fun HomeTile(
     glyph: String,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cornerLabel: String? = null,
+    onCornerClick: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(16.dp)
     Column(
@@ -179,11 +195,29 @@ private fun HomeTile(
             .padding(14.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = glyph,
-            fontSize = 30.sp,
-            color = MaterialTheme.colorScheme.secondary
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Text(
+                text = glyph,
+                fontSize = 30.sp,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            if (cornerLabel != null && onCornerClick != null) {
+                Text(
+                    text = cornerLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onCornerClick)
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+        }
         Column {
             Text(
                 text = title,

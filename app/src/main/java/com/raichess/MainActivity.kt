@@ -130,7 +130,9 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             onAction = { action ->
                 showCoach = false
                 when (action) {
-                    CoachAdvisor.Action.PLAY_GAME -> showPlaySetup = true
+                    // Same one-tap philosophy as the Play tile: the coach's
+                    // "play a game" starts one, it doesn't open a form
+                    CoachAdvisor.Action.PLAY_GAME -> viewModel.startGame(false)
                     CoachAdvisor.Action.START_LESSON -> {
                         openLessonOnPractice = true
                         showPractice = true
@@ -174,7 +176,12 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             HomeScreen(
                 stats = state.playerStats,
                 coachLine = coachState.headline.takeIf { !coachState.loading },
-                onPlay = { showPlaySetup = true },
+                opponentElo = state.opponentElo,
+                gameMode = state.gameMode,
+                // Straight into the game with the current setup; the tile's
+                // corner button is the path to the setup screen
+                onPlay = { viewModel.startGame(false) },
+                onCustomizeGame = { showPlaySetup = true },
                 onTrain = { showPractice = true },
                 onCoach = { showCoach = true },
                 onReview = { showGames = true },
