@@ -58,11 +58,14 @@ class PlayerProfileRepository(context: Context) {
      *
      * @param moveAccuracy player's accuracy for the game (50.0 = neutral until
      *   post-game analysis is implemented)
+     * @param assistedMoves hints + undos used this game; scales rating gains
+     *   down (see [EloCalculator.assistedGainFactor])
      */
     fun recordResult(
         result: GameResult,
         opponentElo: Int,
-        moveAccuracy: Double = 50.0
+        moveAccuracy: Double = 50.0,
+        assistedMoves: Int = 0
     ): Pair<EloStats, Int> {
         val stats = getStats()
         val newElo = EloCalculator.calculateNewElo(
@@ -70,7 +73,8 @@ class PlayerProfileRepository(context: Context) {
             opponentElo = opponentElo,
             result = result,
             moveAccuracy = moveAccuracy,
-            gamesPlayed = stats.gamesPlayed
+            gamesPlayed = stats.gamesPlayed,
+            assistedMoves = assistedMoves
         )
         val delta = newElo - stats.currentElo
         val updated = stats.withGameResult(newElo, result)

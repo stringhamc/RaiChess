@@ -147,6 +147,43 @@ class EloCalculatorTest {
         assertEquals(675, newElo)
     }
 
+    @Test
+    fun `assisted gain factor scales down and floors at zero`() {
+        assertEquals(1.0, EloCalculator.assistedGainFactor(0), 0.001)
+        assertEquals(0.8, EloCalculator.assistedGainFactor(1), 0.001)
+        assertEquals(0.6, EloCalculator.assistedGainFactor(2), 0.001)
+        assertEquals(0.0, EloCalculator.assistedGainFactor(5), 0.001)
+        assertEquals(0.0, EloCalculator.assistedGainFactor(20), 0.001)
+    }
+
+    @Test
+    fun `assistance shrinks a win's gain and five assists erase it`() {
+        val clean = EloCalculator.calculateNewElo(
+            1200, 1200, GameResult.WIN, 50.0, assistedMoves = 0
+        )
+        val helped = EloCalculator.calculateNewElo(
+            1200, 1200, GameResult.WIN, 50.0, assistedMoves = 2
+        )
+        val carried = EloCalculator.calculateNewElo(
+            1200, 1200, GameResult.WIN, 50.0, assistedMoves = 5
+        )
+        assertTrue("clean win should out-gain assisted win", clean > helped)
+        assertTrue("assisted win should still gain a little", helped > 1200)
+        assertEquals("5 assists should zero the gain", 1200, carried)
+    }
+
+    @Test
+    fun `assistance never softens a loss`() {
+        val cleanLoss = EloCalculator.calculateNewElo(
+            1200, 1200, GameResult.LOSS, 50.0, assistedMoves = 0
+        )
+        val helpedLoss = EloCalculator.calculateNewElo(
+            1200, 1200, GameResult.LOSS, 50.0, assistedMoves = 5
+        )
+        assertEquals("losses cost full price regardless of assists", cleanLoss, helpedLoss)
+        assertTrue(cleanLoss < 1200)
+    }
+
     @org.junit.Test
     fun `win streak increments on wins, holds on draws, resets on losses`() {
         val stats = EloStats(

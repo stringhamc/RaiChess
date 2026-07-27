@@ -62,6 +62,22 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        // Calibration-harness passthrough (see RaiEngineCalibrationTest):
+        // forwards the opt-in flag and Stockfish location from the Gradle
+        // JVM (-D on the command line) into the unit-test JVM, and echoes
+        // test stdout while calibrating so the report lands in the CI log.
+        unitTests.all { test ->
+            listOf("raichess.calibrate", "raichess.calibrate.games", "stockfish.path")
+                .forEach { key ->
+                    System.getProperty(key)?.let { test.systemProperty(key, it) }
+                }
+            if (System.getProperty("raichess.calibrate") == "true") {
+                test.testLogging.showStandardStreams = true
+            }
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

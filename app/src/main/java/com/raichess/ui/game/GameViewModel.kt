@@ -774,11 +774,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             UndoPenalty.NEUTRAL_ACCURACY
         }
+        // Beyond the accuracy dock, assisted moves gate the rating gain
+        // itself: a win carried by hints/undos shouldn't inflate ELO
+        // (Rated mode disables both, so this is always 0 there)
+        val assistedMoves = if (state.gameMode == GameMode.TRAINING) {
+            gameUndoCount + gameHintCount
+        } else {
+            0
+        }
         // Peak comparison must use the pre-game stats: recordResult already
         // folded this game into peakElo, so equality afterwards can't tell
         // a fresh high from re-climbing to a previous one
         val previousPeak = state.playerStats?.peakElo
-        val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy)
+        val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy, assistedMoves)
         persistFinishedGame(state, result, eloAfter = stats.currentElo, eloDelta = delta)
         // Calibration: while the rating is provisional (and moving fast,
         // see EloCalculator's K bands), the next opponent auto-tracks it —

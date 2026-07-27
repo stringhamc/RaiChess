@@ -1,5 +1,7 @@
 package com.raichess.domain.model
 
+import kotlin.math.max
+
 /**
  * ELO rating calculator for RaiChess.
  * Uses a modified ELO system that accounts for move accuracy in addition to game results.
@@ -28,6 +30,18 @@ object EloCalculator {
         else -> K_FACTOR
     }
 
+    /** Fraction of a rating GAIN lost per assisted move (hint rung/undo). */
+    const val ASSIST_GAIN_PENALTY = 0.20
+
+    /**
+     * Multiplier on positive rating changes for a game with [assistedMoves]
+     * hints/undos: 1 assist keeps 80% of the gain, 5+ keep nothing. Applies
+     * to gains only — a loss still costs full price, so assistance can
+     * never shield a rating, only stop it from being inflated.
+     */
+    fun assistedGainFactor(assistedMoves: Int): Double =
+        max(0.0, 1.0 - ASSIST_GAIN_PENALTY * assistedMoves)
+
     /**
      * Calculate new ELO rating after a game
      *
@@ -37,6 +51,8 @@ object EloCalculator {
      * @param moveAccuracy Player's move accuracy percentage (0.0 - 100.0)
      * @param gamesPlayed Completed games before this one; drives the
      *   provisional K (defaults to an established rating's K)
+     * @param assistedMoves Hints + undos used this game; scales positive
+     *   rating changes down (see [assistedGainFactor])
      * @return New ELO rating
      */
     fun calculateNewElo(
@@ -44,7 +60,8 @@ object EloCalculator {
         opponentElo: Int,
         result: GameResult,
         moveAccuracy: Double,
-        gamesPlayed: Int = DEVELOPING_GAMES
+        gamesPlayed: Int = DEVELOPING_GAMES,
+        assistedMoves: Int = 0
     ): Int {
         // Expected score using standard ELO formula
         val expectedScore = calculateExpectedScore(currentElo, opponentElo)
@@ -64,8 +81,15 @@ object EloCalculator {
         val adjustedActualScore = (actualScore + accuracyBonus * 0.3).coerceIn(0.0, 1.0)
 
         // Calculate rating change
-        val ratingChange =
+        val rawChange =
             (kFactorFor(gamesPlayed) * (adjustedActualScore - expectedScore)).toInt()
+        // A heavily-assisted win is the engine's win, not the player's:
+        // gains shrink with assistance, losses never do
+        val ratingChange = if (rawChange > 0) {
+            (rawChange * assistedGainFactor(assistedMoves)).toInt()
+        } else {
+            rawChange
+        }
 
         // Apply change and clamp to valid range
         return (currentElo + ratingChange).coerceIn(MIN_ELO, MAX_ELO)
