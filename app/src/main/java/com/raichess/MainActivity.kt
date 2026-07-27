@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,17 +16,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raichess.data.analysis.AnalysisCoordinator
-import androidx.compose.runtime.LaunchedEffect
+import com.raichess.domain.usecase.CoachAdvisor
+import com.raichess.domain.usecase.DrillSelector
+import com.raichess.ui.coach.CoachScreen
+import com.raichess.ui.coach.CoachViewModel
 import com.raichess.ui.game.GamePhase
 import com.raichess.ui.game.GameScreen
 import com.raichess.ui.game.GameViewModel
 import com.raichess.ui.games.GamesScreen
 import com.raichess.ui.games.GamesViewModel
 import com.raichess.ui.home.HomeScreen
+import com.raichess.ui.home.PlaySetupScreen
 import com.raichess.ui.practice.PracticeScreen
 import com.raichess.ui.practice.PracticeViewModel
 import com.raichess.ui.review.ReviewScreen
 import com.raichess.ui.review.ReviewViewModel
+import com.raichess.ui.settings.SettingsScreen
 import com.raichess.ui.theme.RaiChessTheme
 
 /**
@@ -58,6 +64,12 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     var showPractice by rememberSaveable { mutableStateOf(false) }
     var showGames by rememberSaveable { mutableStateOf(false) }
+    var showCoach by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showPlaySetup by rememberSaveable { mutableStateOf(false) }
+    // Set when the coach's action opens practice: switch to the lesson
+    // queue on entry instead of the default mixed queue
+    var openLessonOnPractice by rememberSaveable { mutableStateOf(false) }
     // -1 = no game open; rememberSaveable needs a non-null primitive
     var reviewGameId by rememberSaveable { mutableStateOf(-1L) }
 
@@ -91,6 +103,12 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
     if (showPractice) {
         val practiceViewModel: PracticeViewModel = viewModel()
         val practiceState by practiceViewModel.uiState.collectAsState()
+        LaunchedEffect(openLessonOnPractice) {
+            if (openLessonOnPractice) {
+                practiceViewModel.setSource(DrillSelector.Source.LESSON)
+                openLessonOnPractice = false
+            }
+        }
         PracticeScreen(
             state = practiceState,
             onSquareTapped = practiceViewModel::onSquareTapped,
@@ -101,21 +119,68 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
         return
     }
 
-    when (state.phase) {
-        GamePhase.SETUP -> HomeScreen(
-            stats = state.playerStats,
-            opponentElo = state.opponentElo,
-            playerColor = state.playerColor,
-            gameMode = state.gameMode,
-            animationsEnabled = state.animationsEnabled,
-            onOpponentEloChanged = viewModel::setOpponentElo,
-            onPlayerColorChanged = viewModel::setPlayerColor,
-            onGameModeChanged = viewModel::setGameMode,
-            onAnimationsChanged = viewModel::setAnimationsEnabled,
-            onStartGame = viewModel::startGame,
-            onPractice = { showPractice = true },
-            onReview = { showGames = true }
+    if (showCoach) {
+        val coachViewModel: CoachViewModel = viewModel()
+        val coachState by coachViewModel.uiState.collectAsState()
+        // Recompute on every entry: games and drills since the last visit
+        // change the advice
+        LaunchedEffect(Unit) { coachViewModel.refresh() }
+        CoachScreen(
+            state = coachState,
+            onAction = { action ->
+                showCoach = false
+                when (action) {
+                    CoachAdvisor.Action.PLAY_GAME -> showPlaySetup = true
+                    CoachAdvisor.Action.START_LESSON -> {
+                        openLessonOnPractice = true
+                        showPractice = true
+                    }
+                    CoachAdvisor.Action.REVIEW_GAMES -> showGames = true
+                }
+            },
+            onBack = { showCoach = false }
         )
+        return
+    }
+
+    if (showSettings) {
+        SettingsScreen(
+            stats = state.playerStats,
+            animationsEnabled = state.animationsEnabled,
+            onAnimationsChanged = viewModel::setAnimationsEnabled,
+            onBack = { showSettings = false }
+        )
+        return
+    }
+
+    when (state.phase) {
+        GamePhase.SETUP -> if (showPlaySetup) {
+            PlaySetupScreen(
+                stats = state.playerStats,
+                opponentElo = state.opponentElo,
+                playerColor = state.playerColor,
+                gameMode = state.gameMode,
+                onOpponentEloChanged = viewModel::setOpponentElo,
+                onPlayerColorChanged = viewModel::setPlayerColor,
+                onGameModeChanged = viewModel::setGameMode,
+                onStartGame = viewModel::startGame,
+                onBack = { showPlaySetup = false }
+            )
+        } else {
+            val coachViewModel: CoachViewModel = viewModel()
+            val coachState by coachViewModel.uiState.collectAsState()
+            // Keep the Coach tile's one-liner current with the latest games
+            LaunchedEffect(Unit) { coachViewModel.refresh() }
+            HomeScreen(
+                stats = state.playerStats,
+                coachLine = coachState.headline.takeIf { !coachState.loading },
+                onPlay = { showPlaySetup = true },
+                onTrain = { showPractice = true },
+                onCoach = { showCoach = true },
+                onReview = { showGames = true },
+                onSettings = { showSettings = true }
+            )
+        }
 
         GamePhase.PLAYING, GamePhase.GAME_OVER -> GameScreen(
             state = state,
