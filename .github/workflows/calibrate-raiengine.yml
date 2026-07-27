@@ -46,10 +46,14 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y stockfish
 
     - name: Play calibration matches
+      # The input goes through env, not ${{ }}-interpolation inside run:,
+      # so a crafted value can't inject into the runner shell
+      env:
+        GAMES: ${{ github.event.inputs.games || '12' }}
       run: |
         ./gradlew testDebugUnitTest \
           --tests "com.raichess.calibration.RaiEngineCalibrationTest" \
           -Draichess.calibrate=true \
-          -Draichess.calibrate.games="${{ github.event.inputs.games || '12' }}" \
+          -Draichess.calibrate.games="$GAMES" \
           -Dstockfish.path="$(command -v stockfish)" \
           --stacktrace

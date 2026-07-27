@@ -19,7 +19,11 @@ import kotlin.math.roundToInt
  */
 object CoachAdvisor {
 
-    /** What the coach suggests doing next. */
+    /**
+     * What the coach suggests doing next. REVIEW_GAMES is wired in the UI
+     * but not yet produced by [advise] — reserved for a future
+     * "review that loss" recommendation.
+     */
     enum class Action { PLAY_GAME, START_LESSON, REVIEW_GAMES }
 
     data class Advice(
@@ -78,7 +82,7 @@ object CoachAdvisor {
             // mention, so "work on your openings" advice isn't crowded out
             if (weakness != null && phase != null) {
                 add(
-                    "Most of it happens in ${PHASE_TALK.getValue(phase.theme)} — " +
+                    "Most of it happens in ${phaseName(phase.theme)} — " +
                         "we'll aim your practice there."
                 )
             }
@@ -121,9 +125,15 @@ object CoachAdvisor {
     }
 
     private fun phaseTalk(stat: ThemeStat): Pair<String, String> =
-        "Let's work on ${PHASE_TALK.getValue(stat.theme)}." to
+        "Let's work on ${phaseName(stat.theme)}." to
             "That's where your mistakes cluster right now — I'll steer your " +
             "drills toward that part of the game."
+
+    // Fallback mirrors WEAKNESS_TALK's: a phase tag added to the taxonomy
+    // without a PHASE_TALK entry must degrade the wording, not crash the
+    // coach screen
+    private fun phaseName(theme: ThemeTag): String =
+        PHASE_TALK[theme] ?: "that part of the game"
 
     // headline to observation; the observation reads naturally before
     // ": I've counted it N× in your recent games"
