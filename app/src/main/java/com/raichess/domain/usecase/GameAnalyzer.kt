@@ -120,7 +120,11 @@ class GameAnalyzer(
                 evaluationCp = if (step.whiteToMove) evalBeforeStm else -evalBeforeStm,
                 bestMoveLan = step.analysis.bestMoveLan,
                 centipawnLoss = if (isPlayerMove) loss else null,
-                classification = if (isPlayerMove) MoveClassifier.classify(loss, playedBest) else null,
+                classification = if (isPlayerMove) {
+                    MoveClassifier.classify(evalBeforeStm, -evalAfterNextStm, playedBest)
+                } else {
+                    null
+                },
                 themes = themes,
                 depth = step.analysis.depth
             )
@@ -142,8 +146,10 @@ class GameAnalyzer(
          * Bump when the analysis semantics change (thresholds, eval
          * conventions, tagging) so stored rows can be found and re-analyzed.
          * v2: theme tagging (Phase B).
+         * v3: hybrid cp + win-probability-drop classification — stored
+         * grades change, so history re-analyzes to match.
          */
-        const val VERSION = 2
+        const val VERSION = 3
 
         /** Per-position budget: deep enough to grade honestly, ~15s for a 60-ply game. */
         const val DEFAULT_MOVE_TIME_MS = 250L

@@ -606,7 +606,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         if (afterMove != null) {
                             playerMoveLoss = MoveClassifier.lossBetween(baseline, afterMove)
                             playerMoveRating = MoveClassifier.classify(
-                                playerMoveLoss,
+                                evalBeforeCp = baseline.effectiveCp(),
+                                evalAfterCp = -afterMove.effectiveCp(),
                                 playedEngineBest = playerMoveLan != null &&
                                     playerMoveLan == baseline.bestMoveLan
                             )

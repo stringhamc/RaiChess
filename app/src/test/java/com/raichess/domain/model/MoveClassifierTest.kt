@@ -13,27 +13,73 @@ class MoveClassifierTest {
     }
 
     @Test
-    fun `classification thresholds match the technical plan`() {
-        // Good: within 0.3 pawns of best
-        assertEquals(MoveClassification.GOOD, MoveClassifier.classify(0, playedEngineBest = false))
-        assertEquals(MoveClassification.GOOD, MoveClassifier.classify(59, playedEngineBest = false))
-        // Inaccuracy: 0.3-1.0 pawn loss
-        assertEquals(MoveClassification.INACCURACY, MoveClassifier.classify(60, playedEngineBest = false))
-        assertEquals(MoveClassification.INACCURACY, MoveClassifier.classify(99, playedEngineBest = false))
-        // Mistake: 1.0-3.0 pawn loss
-        assertEquals(MoveClassification.MISTAKE, MoveClassifier.classify(100, playedEngineBest = false))
-        assertEquals(MoveClassification.MISTAKE, MoveClassifier.classify(299, playedEngineBest = false))
-        // Blunder: 3.0+ pawn loss
-        assertEquals(MoveClassification.BLUNDER, MoveClassifier.classify(300, playedEngineBest = false))
-        assertEquals(MoveClassification.BLUNDER, MoveClassifier.classify(2000, playedEngineBest = false))
+    fun `win drop is the winning-chances loss in percentage points`() {
+        assertEquals(0, MoveClassifier.winDrop(evalBeforeCp = 0, evalAfterCp = 0))
+        // Never negative even when the move improved the position
+        assertEquals(0, MoveClassifier.winDrop(evalBeforeCp = -50, evalAfterCp = 100))
+        // Equality to -900 is a collapse of most of the win chances
+        val collapse = MoveClassifier.winDrop(evalBeforeCp = 0, evalAfterCp = -900)
+        org.junit.Assert.assertTrue("expected a large drop, got $collapse", collapse >= 40)
+    }
+
+    @Test
+    fun `near equality the cp thresholds still gate small losses`() {
+        // Small cp losses stay GOOD regardless of position
+        assertEquals(
+            MoveClassification.GOOD,
+            MoveClassifier.classify(evalBeforeCp = 0, evalAfterCp = -59, playedEngineBest = false)
+        )
+        // A hung queen at equality is a blunder on both scales
+        assertEquals(
+            MoveClassification.BLUNDER,
+            MoveClassifier.classify(evalBeforeCp = 0, evalAfterCp = -900, playedEngineBest = false)
+        )
+    }
+
+    @Test
+    fun `a small opening-style swing is an inaccuracy, not a mistake`() {
+        // Field feedback: 1.2 pawns at move 3 of an even game was labelled
+        // "Mistake" — but it only moves the win chances ~11 points, which
+        // is engine preference territory, not a serious error
+        assertEquals(
+            MoveClassification.INACCURACY,
+            MoveClassifier.classify(evalBeforeCp = 20, evalAfterCp = -100, playedEngineBest = false)
+        )
+        // A 2.5-pawn swing at equality genuinely changes the game: mistake
+        assertEquals(
+            MoveClassification.MISTAKE,
+            MoveClassifier.classify(evalBeforeCp = 0, evalAfterCp = -250, playedEngineBest = false)
+        )
+    }
+
+    @Test
+    fun `swings in decided positions are discounted`() {
+        // Sloppy conversion while completely winning: +900 to +600 is
+        // three pawns of eval but almost no win-chance change — not a
+        // mistake worth nagging
+        assertEquals(
+            MoveClassification.GOOD,
+            MoveClassifier.classify(evalBeforeCp = 900, evalAfterCp = 600, playedEngineBest = false)
+        )
+        // Same in a lost position: -600 to -900 changes nothing
+        assertEquals(
+            MoveClassification.GOOD,
+            MoveClassifier.classify(evalBeforeCp = -600, evalAfterCp = -900, playedEngineBest = false)
+        )
     }
 
     @Test
     fun `playing the engine best move is BEST regardless of loss`() {
         // In practice a best move has ~0 loss, but eval noise between
         // searches must not demote the engine's own first choice
-        assertEquals(MoveClassification.BEST, MoveClassifier.classify(0, playedEngineBest = true))
-        assertEquals(MoveClassification.BEST, MoveClassifier.classify(45, playedEngineBest = true))
+        assertEquals(
+            MoveClassification.BEST,
+            MoveClassifier.classify(evalBeforeCp = 0, evalAfterCp = 0, playedEngineBest = true)
+        )
+        assertEquals(
+            MoveClassification.BEST,
+            MoveClassifier.classify(evalBeforeCp = 0, evalAfterCp = -45, playedEngineBest = true)
+        )
     }
 
     @Test
