@@ -3,14 +3,18 @@ package com.raichess.ui.home
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -110,9 +114,13 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Destination quad
+        // Destination quad. IntrinsicSize.Min rows: both tiles in a row
+        // share the taller tile's height, and tiles grow with font scale
+        // instead of clipping (see HomeTile's min height).
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             HomeTile(
@@ -135,7 +143,9 @@ fun HomeScreen(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             HomeTile(
@@ -145,10 +155,12 @@ fun HomeScreen(
                 onClick = onCoach,
                 modifier = Modifier.weight(1f)
             )
+            // "Games", not "Review": the tile opens the history screen
+            // titled Games — one name per concept
             HomeTile(
                 glyph = "♜",
-                title = "Review",
-                subtitle = "Browse past games",
+                title = "Games",
+                subtitle = "History & review",
                 onClick = onReview,
                 modifier = Modifier.weight(1f)
             )
@@ -188,10 +200,13 @@ private fun HomeTile(
     val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = modifier
-            .aspectRatio(1f)
+            // Near-square at normal font scale, grows with content at
+            // large accessibility scales instead of clipping
+            .heightIn(min = 132.dp)
+            .fillMaxHeight()
             .clip(shape)
             .border(1.dp, ChessColors.SquareBorder.copy(alpha = 0.35f), shape)
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = title, onClick = onClick)
             .padding(14.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -206,16 +221,25 @@ private fun HomeTile(
                 color = MaterialTheme.colorScheme.secondary
             )
             if (cornerLabel != null && onCornerClick != null) {
-                Text(
-                    text = cornerLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.secondary,
+                // 48dp minimum target: this sits inside a tile whose own
+                // tap instantly starts a game — a near-miss must not
+                Box(
                     modifier = Modifier
+                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onCornerClick)
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                )
+                        .clickable(
+                            onClickLabel = "Customize game",
+                            onClick = onCornerClick
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = cornerLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        letterSpacing = 1.sp,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
             }
         }
         Column {

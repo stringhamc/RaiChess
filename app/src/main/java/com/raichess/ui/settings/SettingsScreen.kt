@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -14,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -34,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.raichess.BuildConfig
 import com.raichess.data.diagnostics.EngineDiagnostics
 import com.raichess.domain.model.EloStats
+import com.raichess.ui.components.RaiScreen
 import com.raichess.ui.components.RecordRow
 import com.raichess.ui.components.Section
 import com.raichess.ui.components.SectionLabel
@@ -51,21 +50,7 @@ fun SettingsScreen(
     onAnimationsChanged: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp, vertical = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(28.dp))
-
+    RaiScreen(title = "Settings", onBack = onBack) {
         if (stats != null) {
             Section(label = "Record") {
                 RecordRow(
@@ -127,14 +112,6 @@ fun SettingsScreen(
             letterSpacing = 1.sp,
             color = MaterialTheme.colorScheme.secondary
         )
-
-        Spacer(modifier = Modifier.height(28.dp))
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Back")
-        }
     }
 }
 

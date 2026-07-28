@@ -15,6 +15,7 @@ import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.HintAdvisor
 import com.raichess.ui.game.LastMove
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -65,31 +66,64 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
     private val _uiState = MutableStateFlow(ReviewUiState())
     val uiState: StateFlow<ReviewUiState> = _uiState
 
+    /** Bumped by every load(); in-flight polls from older loads bail out. */
+    private var loadSeq = 0
+
     init {
         load()
     }
 
+    /** Explicit id → that game; null → the most recent game, any state. */
+    private suspend fun fetch(gameId: Long?) = if (gameId != null) {
+        gameRepository.getGame(gameId)
+    } else {
+        gameRepository.recentGames(1).firstOrNull()
+    }
+
     /**
-     * Load a specific game's review, or the most recent analyzed game when
-     * [gameId] is null. Public and re-callable: the screen reloads on every
-     * entry (the Activity-scoped ViewModel used to load once in init and
-     * then showed a stale game forever after new games were played).
+     * Load a specific game's review, or the most recent game when [gameId]
+     * is null (the game-over "Review this game" path — that game may still
+     * be saving or analyzing, so pending states poll until the analysis
+     * lands instead of demanding a manual back-and-retry). Public and
+     * re-callable: the screen reloads on every entry (the Activity-scoped
+     * ViewModel used to load once in init and then showed a stale game
+     * forever after new games were played).
      */
     fun load(gameId: Long? = null) {
         _uiState.value = ReviewUiState()
+        val seq = ++loadSeq
         viewModelScope.launch {
             try {
-                val game = if (gameId != null) {
-                    gameRepository.getGame(gameId)
-                } else {
-                    gameRepository.recentGames(20)
-                        .firstOrNull { it.analysisState == AnalysisState.DONE }
-                }
-                if (game == null || game.analysisState != AnalysisState.DONE) {
+                var game = fetch(gameId)
+                if (game == null || game.analysisState == AnalysisState.PENDING) {
                     // Nudge the background analyzer: if this game's analysis
                     // was interrupted (app killed mid-sweep), this is what
                     // finishes it so the next visit has the full review
                     AnalysisCoordinator.analyzePendingGames(getApplication())
+                    val anyGames = game != null || gameRepository.recentGames(1).isNotEmpty()
+                    _uiState.value = ReviewUiState(
+                        loading = false,
+                        // In latest-game mode the row may simply not be
+                        // saved yet — treat "no games" as pending too and
+                        // let the poll below find it
+                        noGames = gameId != null && !anyGames,
+                        analysisPending = gameId == null || anyGames
+                    )
+                    // Analysis takes ~15s of engine time; poll rather than
+                    // sending the player away to come back manually
+                    var attempts = 0
+                    while (attempts < MAX_PENDING_POLLS &&
+                        (game == null || game.analysisState == AnalysisState.PENDING)
+                    ) {
+                        delay(PENDING_POLL_MS)
+                        // A newer load() owns the screen now — stop quietly
+                        if (seq != loadSeq) return@launch
+                        game = fetch(gameId)
+                        attempts++
+                    }
+                    if (seq != loadSeq) return@launch
+                }
+                if (game == null || game.analysisState != AnalysisState.DONE) {
                     val anyGames = game != null || gameRepository.recentGames(1).isNotEmpty()
                     _uiState.value = ReviewUiState(
                         loading = false,
@@ -171,5 +205,9 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
          * worth replaying, not every half-pawn slip.
          */
         private val GRADED = setOf("MISTAKE", "BLUNDER")
+
+        // ~15s of engine time per analysis; 12 × 2.5s comfortably covers it
+        private const val MAX_PENDING_POLLS = 12
+        private const val PENDING_POLL_MS = 2500L
     }
 }

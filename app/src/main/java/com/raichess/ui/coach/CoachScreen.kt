@@ -5,17 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.raichess.domain.usecase.CoachAdvisor
 import com.raichess.ui.components.RaiLogo
+import com.raichess.ui.components.RaiScreen
 import com.raichess.ui.components.SectionLabel
 import com.raichess.ui.theme.ChessColors
 
@@ -40,25 +37,21 @@ fun CoachScreen(
     onAction: (CoachAdvisor.Action) -> Unit,
     onBack: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp, vertical = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RaiLogo(size = 36.dp)
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Coach",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+    RaiScreen(
+        title = "Coach",
+        onBack = onBack,
+        titleRow = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RaiLogo(size = 36.dp)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Coach",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
         }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
+    ) {
         if (state.loading) {
             Text(
                 "Thinking…",
@@ -135,14 +128,6 @@ fun CoachScreen(
                     }
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Back")
         }
     }
 }

@@ -35,6 +35,7 @@ import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.UndoPenalty
 import com.raichess.domain.model.WinProbability
 import com.raichess.domain.model.canUndo
+import com.raichess.domain.usecase.CoachAdvisor
 import com.raichess.domain.usecase.HintAdvisor
 import com.raichess.domain.usecase.ThemeTagger
 import kotlinx.coroutines.Dispatchers
@@ -107,8 +108,16 @@ data class GameUiState(
     val isPlayerInCheck: Boolean = false,
     val ending: GameEnding? = null,
     val eloDelta: Int? = null,
+    /**
+     * What [eloDelta] would have been with zero hints/undos, or null when
+     * no assists were used. Shown at game over so the cost of assistance
+     * is visible, not a mystery.
+     */
+    val eloDeltaClean: Int? = null,
     /** True when this game's result set a strictly new peak ELO. */
-    val isNewPeak: Boolean = false
+    val isNewPeak: Boolean = false,
+    /** The coach's one-line reaction to the finished game (Training only). */
+    val coachReaction: String? = null
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -245,7 +254,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerInCheck = false,
             ending = null,
             eloDelta = null,
+            eloDeltaClean = null,
             isNewPeak = false,
+            coachReaction = null,
             undoCount = 0,
             canUndo = false,
             moveSeq = 0,
@@ -786,6 +797,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // folded this game into peakElo, so equality afterwards can't tell
         // a fresh high from re-climbing to a previous one
         val previousPeak = state.playerStats?.peakElo
+        // Counterfactual for the game-over line: what the delta would have
+        // been with zero assists (neutral accuracy, no gain gating), so the
+        // player can see exactly what the hints/undos cost
+        val preStats = state.playerStats
+        val cleanDelta = if (assistedMoves > 0 && preStats != null) {
+            EloCalculator.calculateNewElo(
+                currentElo = preStats.currentElo,
+                opponentElo = state.opponentElo,
+                result = result,
+                moveAccuracy = UndoPenalty.NEUTRAL_ACCURACY,
+                gamesPlayed = preStats.gamesPlayed,
+                assistedMoves = 0
+            ) - preStats.currentElo
+        } else {
+            null
+        }
         val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy, assistedMoves)
         persistFinishedGame(state, result, eloAfter = stats.currentElo, eloDelta = delta)
         // Calibration: while the rating is provisional (and moving fast,
@@ -797,6 +824,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             state.opponentElo
         }
+        val isNewPeak = previousPeak != null && stats.peakElo > previousPeak
         _uiState.value = state.copy(
             phase = GamePhase.GAME_OVER,
             playerStats = stats,
@@ -805,7 +833,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isPlayerTurn = false,
             ending = ending,
             eloDelta = delta,
-            isNewPeak = previousPeak != null && stats.peakElo > previousPeak,
+            eloDeltaClean = cleanDelta?.takeIf { it != delta },
+            isNewPeak = isNewPeak,
+            // The coach speaks at game over in Training; Rated stays terse
+            coachReaction = if (state.gameMode == GameMode.TRAINING) {
+                CoachAdvisor.react(
+                    result = result,
+                    newPeak = isNewPeak,
+                    winStreak = stats.winStreak,
+                    calibrating = stats.gamesPlayed < EloCalculator.PROVISIONAL_GAMES
+                )
+            } else {
+                null
+            },
             canUndo = false,
             canHint = false,
             coachWarning = false,

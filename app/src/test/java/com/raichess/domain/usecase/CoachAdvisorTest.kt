@@ -1,6 +1,7 @@
 package com.raichess.domain.usecase
 
 import com.raichess.domain.model.EloStats
+import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.ThemeTag
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -84,6 +85,42 @@ class CoachAdvisorTest {
     fun `clean profile stays encouraging`() {
         val advice = CoachAdvisor.advise(stats(25), WeaknessProfile.EMPTY, defaultPlan, emptyMap())
         assertEquals("Looking sharp.", advice.headline)
+    }
+
+    @Test
+    fun `a fresh loss makes the coach suggest reviewing it`() {
+        val advice = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            lastGameWasLoss = true
+        )
+        assertEquals(CoachAdvisor.Action.REVIEW_GAMES, advice.action)
+        assertTrue(advice.focuses.any { it.contains("loss") })
+        // The lesson stays visible as a focus even when the loss leads
+        assertTrue(advice.focuses.any { it.startsWith("Current lesson:") })
+    }
+
+    @Test
+    fun `reactions match the result and its context`() {
+        assertTrue(
+            CoachAdvisor.react(GameResult.WIN, newPeak = true, winStreak = 1, calibrating = false)
+                .contains("peak")
+        )
+        assertTrue(
+            CoachAdvisor.react(GameResult.WIN, newPeak = false, winStreak = 4, calibrating = false)
+                .contains("4 in a row")
+        )
+        assertTrue(
+            CoachAdvisor.react(GameResult.LOSS, newPeak = false, winStreak = 0, calibrating = true)
+                .contains("finding your level")
+        )
+        assertTrue(
+            CoachAdvisor.react(GameResult.LOSS, newPeak = false, winStreak = 0, calibrating = false)
+                .contains("practice material")
+        )
+        assertTrue(
+            CoachAdvisor.react(GameResult.DRAW, newPeak = false, winStreak = 0, calibrating = false)
+                .contains("half-point")
+        )
     }
 
     @Test

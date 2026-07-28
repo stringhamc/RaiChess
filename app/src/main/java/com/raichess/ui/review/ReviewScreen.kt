@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +65,7 @@ fun ReviewScreen(
                 "Play a game and it'll be analyzed for review here."
             )
             state.analysisPending -> ReviewMessage(
-                "Your last game is still being analyzed — check back in a moment."
+                "Analyzing your game — this page updates when it's ready."
             )
             state.cleanGame -> {
                 Headline(state.headline)
@@ -81,9 +82,10 @@ fun ReviewScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                // Fixed-height detail slot: no board reflow while stepping
+                // Min-height detail slot: no board reflow while stepping at
+                // normal font scale; grows instead of clipping at large ones
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(64.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

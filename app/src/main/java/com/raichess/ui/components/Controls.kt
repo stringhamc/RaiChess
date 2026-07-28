@@ -5,15 +5,21 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,6 +30,54 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.raichess.ui.theme.ChessColors
+
+/**
+ * Shared scaffold for the setup-style screens (play setup, coach,
+ * settings, games): consistent padding, a title (or custom [titleRow]),
+ * the content, and the bottom Back button — one place instead of five
+ * hand-rolled copies. Window insets are handled globally in MainActivity.
+ *
+ * [scrollable] = false is for screens whose content manages its own
+ * scrolling (e.g. a weighted list); their content can use ColumnScope
+ * weights, which a scrolling column can't offer.
+ */
+@Composable
+internal fun RaiScreen(
+    title: String,
+    onBack: () -> Unit,
+    scrollable: Boolean = true,
+    titleRow: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
+            )
+            .padding(horizontal = 28.dp, vertical = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (titleRow != null) {
+            titleRow()
+        } else {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        content()
+        Spacer(modifier = Modifier.height(24.dp))
+        OutlinedButton(
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Back")
+        }
+    }
+}
 
 /**
  * Shared form controls for the setup-style screens (home, play setup,
