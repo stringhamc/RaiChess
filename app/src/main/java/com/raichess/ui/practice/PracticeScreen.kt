@@ -1,5 +1,6 @@
 package com.raichess.ui.practice
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
@@ -9,7 +10,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -21,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.raichess.domain.usecase.DrillSelector
 import com.raichess.ui.game.ChessBoard
+import com.raichess.ui.theme.ChessColors
 
 /**
  * Practice screen (Phase D): drills from the player's own analyzed
@@ -115,9 +119,40 @@ fun PracticeScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
-                // Fixed-height prompt slot: no board reflow on feedback
+                // A completed lesson is the biggest earned milestone here —
+                // it gets a distinct celebration card, not a routine prompt
+                val celebrated = state.lessonJustCompletedTitle
+                if (celebrated != null) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                1.dp,
+                                ChessColors.ControlActive,
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Lesson complete!",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = ChessColors.ControlActive
+                        )
+                        Text(
+                            text = "$celebrated — done. Rai: one thing trained, on to the next.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+                // Min-height prompt slot: no board reflow on feedback at
+                // normal font scale; grows instead of clipping at large ones
                 Box(
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

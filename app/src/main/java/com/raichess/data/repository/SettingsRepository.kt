@@ -21,11 +21,16 @@ class SettingsRepository(context: Context) {
             prefs.edit().putBoolean(KEY_ANIMATIONS, value).apply()
         }
 
-    /** Remembers the player's last-selected game mode across launches. */
+    /**
+     * Remembers the player's last-selected game mode across launches.
+     * First-run default is TRAINING: with instant-play from the home tile,
+     * a brand-new player's first game should land in the assisted,
+     * coach-visible mode — Rated is an explicit choice, not a surprise.
+     */
     var gameMode: GameMode
         get() = when (prefs.getString(KEY_GAME_MODE, null)) {
-            GameMode.TRAINING.name -> GameMode.TRAINING
-            else -> GameMode.RATED
+            GameMode.RATED.name -> GameMode.RATED
+            else -> GameMode.TRAINING
         }
         set(value) {
             prefs.edit().putString(KEY_GAME_MODE, value.name).apply()

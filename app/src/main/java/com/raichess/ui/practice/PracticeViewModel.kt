@@ -62,7 +62,13 @@ data class PracticeUiState(
     /** "3 of 8 solved" for the active lesson. */
     val lessonProgressText: String? = null,
     /** True when every lesson in the current plan is complete. */
-    val lessonComplete: Boolean = false
+    val lessonComplete: Boolean = false,
+    /**
+     * Title of the lesson unit the player just finished, or null. Drives
+     * the celebration card — completing a lesson is the biggest earned
+     * milestone in practice and shouldn't render like a routine solve.
+     */
+    val lessonJustCompletedTitle: String? = null
 )
 
 /**
@@ -154,6 +160,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                         lessonComplete = true,
                         lessonTitle = null,
                         lessonProgressText = null,
+                        lessonJustCompletedTitle = null,
                         practiceRating = targetRating
                     )
                     return@launch
@@ -176,6 +183,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                     lessonTitle = lesson.title,
                     lessonProgressText =
                         "${(solves[lesson.id] ?: 0)} of ${lesson.targetSolves} solved",
+                    lessonJustCompletedTitle = null,
                     practiceRating = targetRating
                 )
                 if (queue.isNotEmpty()) startDrill(queue[0])
@@ -204,6 +212,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 lessonComplete = false,
                 lessonTitle = null,
                 lessonProgressText = null,
+                lessonJustCompletedTitle = null,
                 practiceRating = targetRating
             )
             if (queue.isNotEmpty()) startDrill(queue[0])
@@ -393,7 +402,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         // Lesson bookkeeping: solves advance the active unit; completing
         // it flags the next "Next" tap to load the following lesson
         var lessonProgress: String? = null
-        var lessonDonePrompt: String? = null
+        var lessonDoneTitle: String? = null
         val lesson = activeLessonUnit
         if (solved && state.source == DrillSelector.Source.LESSON && lesson != null) {
             val solves = try {
@@ -407,7 +416,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                     "${solves.coerceAtMost(lesson.targetSolves)} of ${lesson.targetSolves} solved"
                 if (solves >= lesson.targetSolves) {
                     lessonJustCompleted = true
-                    lessonDonePrompt = "Lesson complete! Tap Next for your next lesson."
+                    lessonDoneTitle = lesson.title
                 }
             }
         }
@@ -416,10 +425,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             squares = boardSnapshot(),
             phase = if (solved) DrillPhase.SOLVED else DrillPhase.FAILED,
             prompt = when {
-                lessonDonePrompt != null -> lessonDonePrompt
+                lessonDoneTitle != null -> "Tap Next for your next lesson."
                 solved -> if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
                 else -> failPrompt(revealLan)
             },
+            lessonJustCompletedTitle = lessonDoneTitle,
             lessonProgressText = lessonProgress ?: state.lessonProgressText,
             selectedSquare = null,
             legalTargets = emptySet(),

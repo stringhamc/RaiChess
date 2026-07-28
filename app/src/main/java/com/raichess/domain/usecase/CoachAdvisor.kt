@@ -2,6 +2,7 @@ package com.raichess.domain.usecase
 
 import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloStats
+import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.ThemeTag
 import kotlin.math.roundToInt
 
@@ -19,11 +20,7 @@ import kotlin.math.roundToInt
  */
 object CoachAdvisor {
 
-    /**
-     * What the coach suggests doing next. REVIEW_GAMES is wired in the UI
-     * but not yet produced by [advise] — reserved for a future
-     * "review that loss" recommendation.
-     */
+    /** What the coach suggests doing next. */
     enum class Action { PLAY_GAME, START_LESSON, REVIEW_GAMES }
 
     data class Advice(
@@ -41,7 +38,9 @@ object CoachAdvisor {
         stats: EloStats?,
         profile: WeaknessProfile,
         plan: List<LessonPlanner.Lesson>,
-        solves: Map<String, Int>
+        solves: Map<String, Int>,
+        /** True when the player's most recent finished game was a loss. */
+        lastGameWasLoss: Boolean = false
     ): Advice {
         val gamesPlayed = stats?.gamesPlayed ?: 0
         if (gamesPlayed == 0) return welcome(plan)
@@ -88,11 +87,45 @@ object CoachAdvisor {
             }
         }
 
-        return if (lesson != null) {
-            Advice(headline, detail, focuses, Action.START_LESSON, "Continue: ${lesson.title}")
-        } else {
-            Advice(headline, detail, focuses, Action.PLAY_GAME, "Play a game")
+        // A fresh loss outranks the standing plan: reviewing it while it's
+        // recent is the most coach-like move available, and the lesson is
+        // still listed as a focus above
+        return when {
+            lastGameWasLoss -> Advice(
+                headline, detail,
+                focuses + "That last loss is worth a look together — losses teach fastest.",
+                Action.REVIEW_GAMES, "Review your last game"
+            )
+            lesson != null ->
+                Advice(headline, detail, focuses, Action.START_LESSON, "Continue: ${lesson.title}")
+            else ->
+                Advice(headline, detail, focuses, Action.PLAY_GAME, "Play a game")
         }
+    }
+
+    /**
+     * One-line reaction to a just-finished game, shown on the game-over
+     * screen. Same tone rules as [advise]; picks the most noteworthy thing
+     * about the result.
+     */
+    fun react(
+        result: GameResult,
+        newPeak: Boolean,
+        winStreak: Int,
+        calibrating: Boolean
+    ): String = when {
+        result == GameResult.WIN && newPeak ->
+            "New peak — that's real progress. Noted."
+        result == GameResult.WIN && winStreak >= 3 ->
+            "That's $winStreak in a row — you're trending up."
+        result == GameResult.WIN ->
+            "Well played. Ready for the next one when you are."
+        result == GameResult.DRAW ->
+            "A solid hold. Let's find the half-point you left behind."
+        calibrating ->
+            "Good data — I'm still finding your level, and this helps."
+        else ->
+            "Every loss is practice material — let's see what this one teaches."
     }
 
     /** First-run voice: no games yet, nothing to diagnose. */

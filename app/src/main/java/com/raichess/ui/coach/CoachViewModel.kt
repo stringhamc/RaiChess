@@ -7,9 +7,12 @@ import androidx.lifecycle.viewModelScope
 import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.LessonRepository
 import com.raichess.data.repository.PlayerProfileRepository
+import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.usecase.CoachAdvisor
 import com.raichess.domain.usecase.LessonPlanner
 import com.raichess.domain.usecase.WeaknessProfile
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -50,12 +53,16 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(CoachUiState())
     val uiState: StateFlow<CoachUiState> = _uiState
 
-    init {
-        refresh()
-    }
+    // No refresh() in init: every screen that shows coach state refreshes
+    // on entry (MainActivity LaunchedEffect), and the first entry is the
+    // home screen itself — an init call would just compute everything twice
+    private var refreshJob: Job? = null
 
     fun refresh() {
-        viewModelScope.launch {
+        // A newer refresh owns the state; racing loads would finish
+        // last-write-wins otherwise
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             val profile = try {
                 gameRepository.weaknessProfile()
             } catch (e: Exception) {
@@ -70,7 +77,17 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 Log.w(TAG, "lesson progress unavailable", e)
                 emptyMap()
             }
-            val advice = CoachAdvisor.advise(stats, profile, plan, solves)
+            val lastGameWasLoss = try {
+                gameRepository.recentGames(1).firstOrNull()?.let { game ->
+                    val color = runCatching { PlayerColor.valueOf(game.playerColor) }
+                        .getOrDefault(PlayerColor.WHITE)
+                    GameResult.fromPgnResult(game.result, color) == GameResult.LOSS
+                } ?: false
+            } catch (e: Exception) {
+                Log.w(TAG, "last game unavailable", e)
+                false
+            }
+            val advice = CoachAdvisor.advise(stats, profile, plan, solves, lastGameWasLoss)
             val active = LessonPlanner.activeLesson(plan, solves)
 
             _uiState.value = CoachUiState(

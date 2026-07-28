@@ -18,15 +18,19 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,7 +68,9 @@ fun GameScreen(
     onHint: () -> Unit,
     onWhyTapped: () -> Unit,
     onResign: () -> Unit,
-    onNewGame: () -> Unit
+    onNewGame: () -> Unit,
+    onPlayAgain: () -> Unit = onNewGame,
+    onReviewGame: (() -> Unit)? = null
 ) {
     val flipped = state.playerColor == PlayerColor.BLACK
     val material = remember(state.squares) { MaterialCalculator.compute(state.squares) }
@@ -107,8 +113,19 @@ fun GameScreen(
             text = statusText(state, thinkingTick),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.secondary,
+            textAlign = TextAlign.Center,
             modifier = Modifier.padding(vertical = 6.dp)
         )
+        // The coach gets a word in at game over (Training only)
+        if (state.phase == GamePhase.GAME_OVER && state.coachReaction != null) {
+            Text(
+                text = "Rai: ${state.coachReaction}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
 
         // Coach line (Training only — Rated shouldn't pay a blank gap for a
         // feature it never shows): a requested hint, else the live move
@@ -121,7 +138,10 @@ fun GameScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(coachLineHeight)
+                    // min, not fixed: at large accessibility font scales the
+                    // two lines outgrow the 1.0x-derived slot — growing the
+                    // slot (one-time reflow) beats clipping the text
+                    .heightIn(min = coachLineHeight)
                     .then(
                         if (whyTappable) Modifier.clickable(onClick = onWhyTapped)
                         else Modifier
@@ -168,11 +188,13 @@ fun GameScreen(
                 .weight(1f)
         )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            if (state.phase == GamePhase.PLAYING) {
+        if (state.phase == GamePhase.PLAYING) {
+            // Resign is one mis-tap from a recorded loss — confirm it
+            var showResignConfirm by remember { mutableStateOf(false) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
                 if (state.gameMode == GameMode.TRAINING) {
                     OutlinedButton(onClick = onUndo, enabled = state.canUndo) {
                         Text(if (state.undoCount > 0) "Undo (${state.undoCount})" else "Undo")
@@ -187,12 +209,50 @@ fun GameScreen(
                         Text(if (state.hintCount > 0) "Hint (${state.hintCount})" else "Hint")
                     }
                 }
-                OutlinedButton(onClick = onResign) {
+                OutlinedButton(onClick = { showResignConfirm = true }) {
                     Text("Resign")
                 }
-            } else {
+            }
+            if (showResignConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showResignConfirm = false },
+                    title = { Text("Resign?") },
+                    text = { Text("This counts as a loss.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showResignConfirm = false
+                            onResign()
+                        }) { Text("Resign") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showResignConfirm = false }) {
+                            Text("Keep playing")
+                        }
+                    }
+                )
+            }
+        } else {
+            // Game-over panel: review-while-motivated first, then rematch
+            // or home. No review for a game with no stored moves (instant
+            // resign) — there'd be nothing to open.
+            if (onReviewGame != null && state.moveHistorySan.isNotEmpty()) {
+                Button(
+                    onClick = onReviewGame,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Review this game")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                OutlinedButton(onClick = onPlayAgain) {
+                    Text("Play again")
+                }
                 OutlinedButton(onClick = onNewGame) {
-                    Text("New Game")
+                    Text("Home")
                 }
             }
         }
@@ -578,7 +638,16 @@ private fun statusText(state: GameUiState, thinkingTick: Int = 0): String {
 private fun eloDeltaText(state: GameUiState): String {
     val delta = state.eloDelta ?: return ""
     val sign = if (delta >= 0) "+" else ""
-    return " ELO $sign$delta → ${state.playerStats?.currentElo ?: ""}"
+    val base = " ELO $sign$delta → ${state.playerStats?.currentElo ?: ""}"
+    // Itemize the assistance cost so a shrunken gain is explained, not a
+    // mystery — and so players can see hints are cheap, not punitive
+    val clean = state.eloDeltaClean ?: return base
+    val cleanSign = if (clean >= 0) "+" else ""
+    val assists = listOfNotNull(
+        state.hintCount.takeIf { it > 0 }?.let { "$it hint${if (it == 1) "" else "s"}" },
+        state.undoCount.takeIf { it > 0 }?.let { "$it undo${if (it == 1) "" else "s"}" }
+    ).joinToString(", ")
+    return "$base ($cleanSign$clean without $assists)"
 }
 
 /** Celebrate a rating personal best the moment it happens. */
