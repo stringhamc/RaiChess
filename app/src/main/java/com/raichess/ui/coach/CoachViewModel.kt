@@ -8,9 +8,10 @@ import com.raichess.data.repository.DailyRepository
 import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.LessonRepository
 import com.raichess.data.repository.PlayerProfileRepository
-import com.raichess.domain.model.DailyStreak
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.PlayerColor
+import com.raichess.domain.model.TrainingLoad
+import com.raichess.domain.model.TrainingStatus
 import com.raichess.domain.usecase.CoachAdvisor
 import com.raichess.domain.usecase.Curriculum
 import com.raichess.domain.usecase.LessonPlanner
@@ -53,11 +54,11 @@ data class CoachUiState(
     val actionLabel: String = "",
     val steps: List<CoachStepRow> = emptyList(),
     val planRows: List<CoachPlanRow> = emptyList(),
-    /** Consecutive training days (alive through yesterday). */
-    val dayStreak: Int = 0,
+    /** The coach's read on recent training load (null = no history). */
+    val trainingStatus: TrainingStatus? = null,
     /** Games finished + drills solved today, toward [dailyGoal]. */
     val dailySolved: Int = 0,
-    val dailyGoal: Int = DailyStreak.DAILY_GOAL
+    val dailyGoal: Int = TrainingLoad.DAILY_GOAL
 )
 
 /**
@@ -101,7 +102,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
             }
             val plan = LessonPlanner.buildPlan(profile, practiceRating, solves)
             val activeStepId = Curriculum.activeStep(practiceRating, solves).id
-            val dayStreak = dailyRepository.displayStreak()
+            val trainingStatus = dailyRepository.trainingStatus()
             val lastGameWasLoss = try {
                 gameRepository.recentGames(1).firstOrNull()?.let { game ->
                     val color = runCatching { PlayerColor.valueOf(game.playerColor) }
@@ -113,7 +114,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 false
             }
             val advice = CoachAdvisor.advise(
-                stats, profile, plan, solves, lastGameWasLoss, dayStreak
+                stats, profile, plan, solves, lastGameWasLoss, trainingStatus
             )
             val active = LessonPlanner.activeLesson(plan, solves)
 
@@ -149,7 +150,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                         active = lesson.id == active?.id
                     )
                 },
-                dayStreak = dayStreak,
+                trainingStatus = trainingStatus,
                 dailySolved = dailyRepository.countToday()
             )
         }

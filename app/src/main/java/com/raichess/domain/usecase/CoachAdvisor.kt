@@ -4,6 +4,7 @@ import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.ThemeTag
+import com.raichess.domain.model.TrainingStatus
 import kotlin.math.roundToInt
 
 /**
@@ -41,8 +42,8 @@ object CoachAdvisor {
         solves: Map<String, Int>,
         /** True when the player's most recent finished game was a loss. */
         lastGameWasLoss: Boolean = false,
-        /** Consecutive training days (alive through yesterday). */
-        dayStreak: Int = 0
+        /** The coach's read on recent training load (null = no history). */
+        trainingStatus: TrainingStatus? = null
     ): Advice {
         val gamesPlayed = stats?.gamesPlayed ?: 0
         if (gamesPlayed == 0) return welcome(plan)
@@ -60,12 +61,7 @@ object CoachAdvisor {
         }
 
         val focuses = buildList {
-            if (dayStreak >= 2) {
-                add(
-                    "$dayStreak training days going — rest days are fine, " +
-                        "just don't take two in a row."
-                )
-            }
+            statusTalk(trainingStatus)?.let { add(it) }
             if (stats != null && gamesPlayed < EloCalculator.PROVISIONAL_GAMES) {
                 add(
                     "We're still placing your rating (game ${gamesPlayed + 1} of " +
@@ -163,6 +159,24 @@ object CoachAdvisor {
         return talk.first to
             "${talk.second}: I've counted it $times in your recent games$cost. " +
             "Let's train it out."
+    }
+
+    /**
+     * The coach's line for each training status. Rest is endorsed, heavy
+     * days are gently capped, lapses are invited back without guilt.
+     */
+    private fun statusTalk(status: TrainingStatus?): String? = when (status) {
+        TrainingStatus.PRODUCTIVE ->
+            "Training status: productive — steady, regular work. This is how improvement happens."
+        TrainingStatus.RECOVERY ->
+            "Rest day — good. Consolidation is training too; come back fresh."
+        TrainingStatus.MAINTAINING ->
+            "You're ticking over. One lesson today turns maintenance into progress."
+        TrainingStatus.DETRAINING ->
+            "It's been a few days — skills rust fast at this stage. A short session brings them right back."
+        TrainingStatus.OVERREACHING ->
+            "That's a lot in one day. Quality beats volume — stop while you're still sharp."
+        null -> null
     }
 
     private fun phaseTalk(stat: ThemeStat): Pair<String, String> =

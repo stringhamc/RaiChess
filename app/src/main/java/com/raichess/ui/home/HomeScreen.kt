@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.raichess.BuildConfig
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
+import com.raichess.domain.model.TrainingStatus
 import com.raichess.ui.components.RaiLogo
 import com.raichess.ui.components.SectionLabel
 import com.raichess.ui.theme.ChessColors
@@ -51,8 +52,8 @@ fun HomeScreen(
     /** Current setup, shown on the Play tile so one-tap play is no surprise. */
     opponentElo: Int,
     gameMode: GameMode,
-    /** Daily habit state: consecutive training days and today's progress. */
-    dayStreak: Int = 0,
+    /** The coach's training-load read and today's goal progress. */
+    trainingStatus: TrainingStatus? = null,
     dailySolved: Int = 0,
     dailyGoal: Int = 3,
     onPlay: () -> Unit,
@@ -104,9 +105,9 @@ fun HomeScreen(
             )
             if (stats.gamesPlayed > 0) {
                 val progressBits = buildList {
-                    // Active-day count, not consecutive days: rest days
-                    // don't break it (see DailyStreak)
-                    if (dayStreak >= 2) add("$dayStreak training days")
+                    // Garmin-style training status, not a streak: rest
+                    // reads as recovery, not a broken chain
+                    statusLabel(trainingStatus)?.let { add(it) }
                     add("Peak ${stats.peakElo}")
                     if (stats.winStreak >= 2) add("${stats.winStreak}-game win streak")
                 }
@@ -193,6 +194,16 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.secondary
         )
     }
+}
+
+/** Short hero label for the training status; the coach has the long form. */
+private fun statusLabel(status: TrainingStatus?): String? = when (status) {
+    TrainingStatus.PRODUCTIVE -> "Productive"
+    TrainingStatus.RECOVERY -> "Recovery day"
+    TrainingStatus.MAINTAINING -> "Maintaining"
+    TrainingStatus.DETRAINING -> "Detraining"
+    TrainingStatus.OVERREACHING -> "Heavy load"
+    null -> null
 }
 
 /**

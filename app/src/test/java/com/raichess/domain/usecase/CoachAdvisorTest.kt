@@ -3,6 +3,7 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.ThemeTag
+import com.raichess.domain.model.TrainingStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -124,19 +125,32 @@ class CoachAdvisorTest {
     }
 
     @Test
-    fun `a live day streak becomes a rest-day-friendly focus`() {
-        val advice = CoachAdvisor.advise(
+    fun `training status speaks in the coach's focuses`() {
+        val productive = CoachAdvisor.advise(
             stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
-            dayStreak = 4
+            trainingStatus = TrainingStatus.PRODUCTIVE
         )
-        assertTrue(advice.focuses.any { it.contains("4 training days") })
-        assertTrue(advice.focuses.any { it.contains("rest days are fine") })
-        // A one-day "streak" isn't worth announcing
-        val quiet = CoachAdvisor.advise(
+        assertTrue(productive.focuses.any { it.contains("productive") })
+
+        // Rest is endorsed, never guilt-tripped
+        val recovery = CoachAdvisor.advise(
             stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
-            dayStreak = 1
+            trainingStatus = TrainingStatus.RECOVERY
         )
-        assertTrue(quiet.focuses.none { it.contains("training days") })
+        assertTrue(recovery.focuses.any { it.contains("Rest day — good") })
+
+        val heavy = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            trainingStatus = TrainingStatus.OVERREACHING
+        )
+        assertTrue(heavy.focuses.any { it.contains("Quality beats volume") })
+
+        // No history, no verdict
+        val silent = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            trainingStatus = null
+        )
+        assertTrue(silent.focuses.none { it.contains("Training status") })
     }
 
     @Test

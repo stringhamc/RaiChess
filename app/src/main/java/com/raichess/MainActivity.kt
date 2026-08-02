@@ -196,7 +196,7 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                 coachLine = coachState.headline.takeIf { !coachState.loading },
                 opponentElo = state.opponentElo,
                 gameMode = state.gameMode,
-                dayStreak = coachState.dayStreak,
+                trainingStatus = coachState.trainingStatus,
                 dailySolved = coachState.dailySolved,
                 dailyGoal = coachState.dailyGoal,
                 // Straight into the game with the current setup; the tile's
