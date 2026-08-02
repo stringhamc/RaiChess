@@ -21,7 +21,7 @@ class CoachAdvisorTest {
     private fun themeStat(theme: ThemeTag, occurrences: Int = 4, avgLossCp: Double = 250.0) =
         ThemeStat(theme = theme, score = 2.0, occurrences = occurrences, avgLossCp = avgLossCp)
 
-    private val defaultPlan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY)
+    private val defaultPlan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY, 800, emptyMap())
 
     @Test
     fun `no games yet gets a welcome and a play action`() {
@@ -121,6 +121,21 @@ class CoachAdvisorTest {
             CoachAdvisor.react(GameResult.DRAW, newPeak = false, winStreak = 0, calibrating = false)
                 .contains("half-point")
         )
+    }
+
+    @Test
+    fun `a live day streak becomes a focus`() {
+        val advice = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            dayStreak = 4
+        )
+        assertTrue(advice.focuses.any { it.contains("Day 4") })
+        // A one-day "streak" isn't worth announcing
+        val quiet = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            dayStreak = 1
+        )
+        assertTrue(quiet.focuses.none { it.contains("Day 1") })
     }
 
     @Test

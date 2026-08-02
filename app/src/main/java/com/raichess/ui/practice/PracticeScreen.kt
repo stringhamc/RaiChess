@@ -112,6 +112,17 @@ fun PracticeScreen(
                             color = MaterialTheme.colorScheme.secondary
                         )
                     }
+                    // Teach before drilling: the unit's concept, coach voice
+                    state.lessonIntro?.let { intro ->
+                        Text(
+                            text = intro,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            textAlign = TextAlign.Center,
+                            maxLines = 4,
+                            modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                 }
                 Text(

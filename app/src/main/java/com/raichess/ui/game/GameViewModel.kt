@@ -16,6 +16,7 @@ import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.data.engine.ChessEngine
 import com.raichess.data.engine.EngineFactory
 import com.raichess.data.engine.RaiEngine
+import com.raichess.data.repository.DailyRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.SettingsRepository
@@ -125,6 +126,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = PlayerProfileRepository(application)
     private val practiceRepository = PracticeRepository(application)
     private val settingsRepository = SettingsRepository(application)
+    private val dailyRepository = DailyRepository(application)
     private var board = Board()
     private var moveList = MoveList()
     private var engine: ChessEngine? = null
@@ -815,6 +817,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             null
         }
         val (stats, delta) = repository.recordResult(result, state.opponentElo, accuracy, assistedMoves)
+        // A finished game counts toward the day, win or lose
+        dailyRepository.recordActivity()
         persistFinishedGame(state, result, eloAfter = stats.currentElo, eloDelta = delta)
         // Calibration: while the rating is provisional (and moving fast,
         // see EloCalculator's K bands), the next opponent auto-tracks it —

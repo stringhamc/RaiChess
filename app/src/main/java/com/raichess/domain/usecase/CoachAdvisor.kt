@@ -40,7 +40,9 @@ object CoachAdvisor {
         plan: List<LessonPlanner.Lesson>,
         solves: Map<String, Int>,
         /** True when the player's most recent finished game was a loss. */
-        lastGameWasLoss: Boolean = false
+        lastGameWasLoss: Boolean = false,
+        /** Consecutive training days (alive through yesterday). */
+        dayStreak: Int = 0
     ): Advice {
         val gamesPlayed = stats?.gamesPlayed ?: 0
         if (gamesPlayed == 0) return welcome(plan)
@@ -58,6 +60,9 @@ object CoachAdvisor {
         }
 
         val focuses = buildList {
+            if (dayStreak >= 2) {
+                add("Day $dayStreak of training in a row — a little today keeps it alive.")
+            }
             if (stats != null && gamesPlayed < EloCalculator.PROVISIONAL_GAMES) {
                 add(
                     "We're still placing your rating (game ${gamesPlayed + 1} of " +

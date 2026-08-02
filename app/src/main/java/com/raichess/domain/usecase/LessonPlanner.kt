@@ -3,16 +3,15 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.ThemeTag
 
 /**
- * Builds an ordered lesson plan from the player's profile: first FIX the
- * top weaknesses the analysis keeps seeing, then EXPAND skill by game
- * stage — weakest phase first, remaining phases after (opening →
- * middlegame → endgame). Players with no analyzed games yet get a
- * default fundamentals curriculum, so the Lesson tab is never empty.
+ * Builds an ordered lesson plan: first FIX the top weaknesses the
+ * analysis keeps seeing in the player's own games, then CLIMB the named
+ * curriculum ladder (see [Curriculum]) — the active step for the
+ * player's rating, advanced as steps complete.
  *
- * Pure and recomputed from the profile each time (the same
- * recompute-don't-migrate principle as WeaknessProfiler); only the
- * per-lesson solve counts persist (LessonRepository), keyed by stable
- * lesson ids so a plan reshuffle never loses progress.
+ * Pure and recomputed each time (the same recompute-don't-migrate
+ * principle as WeaknessProfiler); only the per-lesson solve counts
+ * persist (LessonRepository), keyed by stable lesson ids so a plan
+ * reshuffle never loses progress.
  */
 object LessonPlanner {
 
@@ -23,7 +22,7 @@ object LessonPlanner {
     const val MAX_WEAKNESS_LESSONS = 2
 
     data class Lesson(
-        /** Stable id ("weakness:hanging_piece", "phase:endgame"). */
+        /** Stable id ("weakness:hanging_piece", "step2:fork"). */
         val id: String,
         val title: String,
         val description: String,
@@ -31,7 +30,9 @@ object LessonPlanner {
         val themes: Set<String>,
         /** Tag matching the player's own stored mistakes, when applicable. */
         val weaknessTheme: ThemeTag? = null,
-        val targetSolves: Int = TARGET_SOLVES
+        val targetSolves: Int = TARGET_SOLVES,
+        /** Short concept teaching, coach voice, shown before drilling. */
+        val intro: String? = null
     )
 
     private val WEAKNESS_TITLES = mapOf(
@@ -42,54 +43,16 @@ object LessonPlanner {
         ThemeTag.MISSED_CAPTURE to "Take what's offered"
     )
 
-    private val PHASE_LESSONS = mapOf(
-        ThemeTag.OPENING to Lesson(
-            id = "phase:opening",
-            title = "Opening skills",
-            description = "Sharpen how your games begin",
-            themes = DrillSelector.PHASE_TO_LICHESS_THEMES.getValue(ThemeTag.OPENING)
-        ),
-        ThemeTag.MIDDLEGAME to Lesson(
-            id = "phase:middlegame",
-            title = "Middlegame skills",
-            description = "Plans and tactics where most games are decided",
-            themes = DrillSelector.PHASE_TO_LICHESS_THEMES.getValue(ThemeTag.MIDDLEGAME)
-        ),
-        ThemeTag.ENDGAME to Lesson(
-            id = "phase:endgame",
-            title = "Endgame technique",
-            description = "Convert advantages when the board empties",
-            themes = DrillSelector.PHASE_TO_LICHESS_THEMES.getValue(ThemeTag.ENDGAME)
-        )
-    )
-
-    /** The full-phase order used to append phases the profile hasn't seen. */
-    private val ALL_PHASES = listOf(ThemeTag.OPENING, ThemeTag.MIDDLEGAME, ThemeTag.ENDGAME)
-
-    /** Fundamentals curriculum for a profile with no observations yet. */
-    private val DEFAULT_PLAN = listOf(
-        Lesson(
-            id = "core:tactics",
-            title = "Tactics fundamentals",
-            description = "Forks, pins, and skewers — the bread and butter",
-            themes = setOf("fork", "pin", "skewer", "discoveredAttack")
-        ),
-        Lesson(
-            id = "core:mates",
-            title = "Mating patterns",
-            description = "Recognize the standard finishes",
-            themes = setOf("mate", "mateIn1", "mateIn2", "backRankMate")
-        )
-    ) + ALL_PHASES.map { PHASE_LESSONS.getValue(it) }
-
     /**
-     * The ordered plan: weakness lessons (worst first, capped), then phase
-     * lessons weakest-observed phase first with unobserved phases after.
+     * The ordered plan: weakness lessons first (worst first, capped), then
+     * the units of the player's active curriculum step (see
+     * [Curriculum.activeStep]).
      */
-    fun buildPlan(profile: WeaknessProfile): List<Lesson> {
-        // No observations at all → fundamentals first; the appended phase
-        // list below would otherwise make the plan non-empty by construction
-        if (profile.weaknesses.isEmpty() && profile.phases.isEmpty()) return DEFAULT_PLAN
+    fun buildPlan(
+        profile: WeaknessProfile,
+        rating: Int,
+        solvesById: Map<String, Int>
+    ): List<Lesson> {
         val weaknessLessons = profile.weaknesses
             .take(MAX_WEAKNESS_LESSONS)
             .mapNotNull { stat ->
@@ -103,9 +66,7 @@ object LessonPlanner {
                     weaknessTheme = stat.theme
                 )
             }
-        val phaseOrder = (profile.phases.map { it.theme } + ALL_PHASES).distinct()
-        val phaseLessons = phaseOrder.mapNotNull { PHASE_LESSONS[it] }
-        return weaknessLessons + phaseLessons
+        return weaknessLessons + Curriculum.activeStep(rating, solvesById).units
     }
 
     /** First lesson not yet solved to target, or null when the plan is done. */

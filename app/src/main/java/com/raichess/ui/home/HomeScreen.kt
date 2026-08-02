@@ -51,6 +51,10 @@ fun HomeScreen(
     /** Current setup, shown on the Play tile so one-tap play is no surprise. */
     opponentElo: Int,
     gameMode: GameMode,
+    /** Daily habit state: consecutive training days and today's progress. */
+    dayStreak: Int = 0,
+    dailySolved: Int = 0,
+    dailyGoal: Int = 3,
     onPlay: () -> Unit,
     onCustomizeGame: () -> Unit,
     onTrain: () -> Unit,
@@ -100,6 +104,7 @@ fun HomeScreen(
             )
             if (stats.gamesPlayed > 0) {
                 val progressBits = buildList {
+                    if (dayStreak >= 2) add("Day $dayStreak streak")
                     add("Peak ${stats.peakElo}")
                     if (stats.winStreak >= 2) add("${stats.winStreak}-game win streak")
                 }
@@ -133,10 +138,16 @@ fun HomeScreen(
                 onCornerClick = onCustomizeGame,
                 modifier = Modifier.weight(1f)
             )
+            // The tile carries the daily goal until it's met — a small,
+            // guaranteed win to open the app for
             HomeTile(
                 glyph = "♞",
                 title = "Train",
-                subtitle = "Puzzles & drills",
+                subtitle = if (dailySolved < dailyGoal) {
+                    "Daily: $dailySolved of $dailyGoal solved"
+                } else {
+                    "Daily goal done ✓"
+                },
                 onClick = onTrain,
                 modifier = Modifier.weight(1f)
             )
