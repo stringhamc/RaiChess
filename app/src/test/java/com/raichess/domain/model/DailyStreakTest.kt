@@ -21,25 +21,34 @@ class DailyStreakTest {
     }
 
     @Test
-    fun `consecutive days build the streak, a gap resets it`() {
+    fun `a single rest day never breaks the run`() {
         var state = DailyStreak.onActivity(DailyStreak.State(), 100)
         state = DailyStreak.onActivity(state, 101)
-        state = DailyStreak.onActivity(state, 102)
+        // Day 102 off — training resumes on 103 and the run continues
+        state = DailyStreak.onActivity(state, 103)
         assertEquals(3, state.streak)
-        // Day 103 skipped
+    }
+
+    @Test
+    fun `two consecutive days off end the run`() {
+        var state = DailyStreak.onActivity(DailyStreak.State(), 100)
+        state = DailyStreak.onActivity(state, 101)
+        // Days 102 and 103 off
         state = DailyStreak.onActivity(state, 104)
         assertEquals(1, state.streak)
     }
 
     @Test
-    fun `display streak survives overnight but dies after a skipped day`() {
+    fun `display stays alive through one rest day, dies after two`() {
         var state = DailyStreak.onActivity(DailyStreak.State(), 100)
         state = DailyStreak.onActivity(state, 101)
         assertEquals(2, DailyStreak.displayStreak(state, today = 101))
-        // The next morning, before any activity: still alive
+        // The next morning, nothing done yet: alive
         assertEquals(2, DailyStreak.displayStreak(state, today = 102))
-        // A full day skipped: gone
-        assertEquals(0, DailyStreak.displayStreak(state, today = 103))
+        // One full rest day taken; today could still continue the run
+        assertEquals(2, DailyStreak.displayStreak(state, today = 103))
+        // Two full days off: the run is over
+        assertEquals(0, DailyStreak.displayStreak(state, today = 104))
     }
 
     @Test

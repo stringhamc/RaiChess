@@ -61,7 +61,10 @@ object CoachAdvisor {
 
         val focuses = buildList {
             if (dayStreak >= 2) {
-                add("Day $dayStreak of training in a row — a little today keeps it alive.")
+                add(
+                    "$dayStreak training days going — rest days are fine, " +
+                        "just don't take two in a row."
+                )
             }
             if (stats != null && gamesPlayed < EloCalculator.PROVISIONAL_GAMES) {
                 add(

@@ -124,18 +124,19 @@ class CoachAdvisorTest {
     }
 
     @Test
-    fun `a live day streak becomes a focus`() {
+    fun `a live day streak becomes a rest-day-friendly focus`() {
         val advice = CoachAdvisor.advise(
             stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
             dayStreak = 4
         )
-        assertTrue(advice.focuses.any { it.contains("Day 4") })
+        assertTrue(advice.focuses.any { it.contains("4 training days") })
+        assertTrue(advice.focuses.any { it.contains("rest days are fine") })
         // A one-day "streak" isn't worth announcing
         val quiet = CoachAdvisor.advise(
             stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
             dayStreak = 1
         )
-        assertTrue(quiet.focuses.none { it.contains("Day 1") })
+        assertTrue(quiet.focuses.none { it.contains("training days") })
     }
 
     @Test

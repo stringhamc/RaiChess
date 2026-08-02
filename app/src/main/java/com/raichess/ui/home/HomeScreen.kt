@@ -104,7 +104,9 @@ fun HomeScreen(
             )
             if (stats.gamesPlayed > 0) {
                 val progressBits = buildList {
-                    if (dayStreak >= 2) add("Day $dayStreak streak")
+                    // Active-day count, not consecutive days: rest days
+                    // don't break it (see DailyStreak)
+                    if (dayStreak >= 2) add("$dayStreak training days")
                     add("Peak ${stats.peakElo}")
                     if (stats.winStreak >= 2) add("${stats.winStreak}-game win streak")
                 }
