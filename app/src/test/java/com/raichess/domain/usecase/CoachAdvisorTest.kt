@@ -3,6 +3,7 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.ThemeTag
+import com.raichess.domain.model.TrainingStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -21,7 +22,7 @@ class CoachAdvisorTest {
     private fun themeStat(theme: ThemeTag, occurrences: Int = 4, avgLossCp: Double = 250.0) =
         ThemeStat(theme = theme, score = 2.0, occurrences = occurrences, avgLossCp = avgLossCp)
 
-    private val defaultPlan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY)
+    private val defaultPlan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY, 800, emptyMap())
 
     @Test
     fun `no games yet gets a welcome and a play action`() {
@@ -121,6 +122,35 @@ class CoachAdvisorTest {
             CoachAdvisor.react(GameResult.DRAW, newPeak = false, winStreak = 0, calibrating = false)
                 .contains("half-point")
         )
+    }
+
+    @Test
+    fun `training status speaks in the coach's focuses`() {
+        val productive = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            trainingStatus = TrainingStatus.PRODUCTIVE
+        )
+        assertTrue(productive.focuses.any { it.contains("productive") })
+
+        // Rest is endorsed, never guilt-tripped
+        val recovery = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            trainingStatus = TrainingStatus.RECOVERY
+        )
+        assertTrue(recovery.focuses.any { it.contains("Rest day — good") })
+
+        val heavy = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            trainingStatus = TrainingStatus.OVERREACHING
+        )
+        assertTrue(heavy.focuses.any { it.contains("Quality beats volume") })
+
+        // No history, no verdict
+        val silent = CoachAdvisor.advise(
+            stats(15), WeaknessProfile.EMPTY, defaultPlan, emptyMap(),
+            trainingStatus = null
+        )
+        assertTrue(silent.focuses.none { it.contains("Training status") })
     }
 
     @Test

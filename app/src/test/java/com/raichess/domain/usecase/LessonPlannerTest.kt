@@ -20,7 +20,9 @@ class LessonPlannerTest {
                     stat(ThemeTag.MISSED_MATE, 1.5)
                 ),
                 phases = listOf(stat(ThemeTag.ENDGAME, 2.0))
-            )
+            ),
+            rating = 600,
+            solvesById = emptyMap()
         )
         assertEquals("weakness:hanging_piece", plan[0].id)
         assertEquals("weakness:missed_mate", plan[1].id)
@@ -29,18 +31,18 @@ class LessonPlannerTest {
     }
 
     @Test
-    fun `phases follow weaknesses, weakest phase first then the rest`() {
+    fun `curriculum units follow the weaknesses, from the rating's step`() {
         val plan = LessonPlanner.buildPlan(
             WeaknessProfile(
                 weaknesses = listOf(stat(ThemeTag.HANGING_PIECE, 1.0)),
-                phases = listOf(stat(ThemeTag.ENDGAME, 2.0))
-            )
+                phases = emptyList()
+            ),
+            rating = 950,
+            solvesById = emptyMap()
         )
-        val phaseIds = plan.drop(1).map { it.id }
-        assertEquals(
-            listOf("phase:endgame", "phase:opening", "phase:middlegame"),
-            phaseIds
-        )
+        val unitIds = plan.drop(1).map { it.id }
+        assertEquals(Curriculum.stepForRating(950).units.map { it.id }, unitIds)
+        assertTrue(unitIds.all { it.startsWith("step2:") })
     }
 
     @Test
@@ -53,7 +55,9 @@ class LessonPlannerTest {
                     stat(ThemeTag.MISSED_CAPTURE, 1.0)
                 ),
                 phases = emptyList()
-            )
+            ),
+            rating = 600,
+            solvesById = emptyMap()
         )
         assertEquals(
             LessonPlanner.MAX_WEAKNESS_LESSONS,
@@ -62,16 +66,15 @@ class LessonPlannerTest {
     }
 
     @Test
-    fun `empty profile gets the fundamentals curriculum`() {
-        val plan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY)
+    fun `empty profile still gets a full step of units`() {
+        val plan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY, 600, emptyMap())
         assertTrue(plan.isNotEmpty())
-        assertEquals("core:tactics", plan[0].id)
-        assertTrue(plan.any { it.id == "phase:endgame" })
+        assertTrue(plan.all { it.id.startsWith("step1:") })
     }
 
     @Test
     fun `active lesson is the first below target and null when done`() {
-        val plan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY)
+        val plan = LessonPlanner.buildPlan(WeaknessProfile.EMPTY, 600, emptyMap())
         assertEquals(plan[0].id, LessonPlanner.activeLesson(plan, emptyMap())?.id)
 
         val firstDone = mapOf(plan[0].id to LessonPlanner.TARGET_SOLVES)
@@ -83,7 +86,7 @@ class LessonPlannerTest {
 
     @Test
     fun `solve counts round-trip through the prefs codec`() {
-        val solves = mapOf("weakness:hanging_piece" to 3, "phase:endgame" to 8)
+        val solves = mapOf("weakness:hanging_piece" to 3, "step2:fork" to 8)
         assertEquals(solves, LessonPlanner.decodeSolves(LessonPlanner.encodeSolves(solves)))
         assertTrue(LessonPlanner.decodeSolves(null).isEmpty())
         assertTrue(LessonPlanner.decodeSolves("").isEmpty())

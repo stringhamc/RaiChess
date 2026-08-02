@@ -107,6 +107,24 @@ fun CoachScreen(
                 Text(state.actionLabel)
             }
 
+            if (state.steps.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(28.dp))
+                SectionLabel(
+                    text = "Curriculum",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    state.steps.forEach { step ->
+                        StepRow(step)
+                    }
+                }
+            }
+
             if (state.planRows.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(28.dp))
                 SectionLabel(
@@ -129,6 +147,52 @@ fun CoachScreen(
                 }
             }
         }
+    }
+}
+
+/** One rung of the curriculum ladder: state marker, title, progress. */
+@Composable
+private fun StepRow(step: CoachStepRow) {
+    // Upcoming steps are dimmed; the active one carries the detail
+    val titleColor = when {
+        step.active || step.done -> MaterialTheme.colorScheme.onBackground
+        else -> MaterialTheme.colorScheme.secondary
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = step.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (step.active) FontWeight.Medium else FontWeight.Normal,
+                color = titleColor
+            )
+            if (step.active) {
+                Text(
+                    text = step.subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        Text(
+            text = when {
+                step.done -> "✓"
+                step.active -> "▸ ${step.doneUnits} of ${step.totalUnits}"
+                else -> "${step.doneUnits} of ${step.totalUnits}"
+            },
+            fontSize = 13.sp,
+            color = if (step.done) {
+                ChessColors.ControlActive
+            } else {
+                MaterialTheme.colorScheme.secondary
+            },
+            modifier = Modifier.padding(start = 10.dp)
+        )
     }
 }
 
