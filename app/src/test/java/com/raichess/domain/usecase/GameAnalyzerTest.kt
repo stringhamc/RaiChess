@@ -84,12 +84,16 @@ class GameAnalyzerTest {
         assertEquals(4, engine.calls)
 
         val f3 = report.moves[0]
-        // before +20, after: Black's +50 → White -50; loss 70 → inaccuracy
+        // before +20, after: Black's +50 → White -50; loss 70. Under the
+        // hybrid classifier that's only ~7 points of win chance near
+        // equality — below the inaccuracy drop threshold, so GOOD (the cp
+        // loss alone would have said inaccuracy; see MoveClassifierTest)
         assertEquals(70, f3.centipawnLoss)
-        assertEquals(MoveClassification.INACCURACY, f3.classification)
+        assertEquals(MoveClassification.GOOD, f3.classification)
 
         val g4 = report.moves[2]
-        // before -80; after: mate-in-1 for Black (+1000 capped) → White -1000
+        // before -80; after: mate-in-1 for Black (+1000 capped) → White
+        // -1000; a ~41-point win-chance collapse — blunder on both scales
         assertEquals(920, g4.centipawnLoss)
         assertEquals(MoveClassification.BLUNDER, g4.classification)
 
