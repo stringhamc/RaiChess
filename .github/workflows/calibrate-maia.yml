@@ -1,0 +1,94 @@
+name: Calibrate Maia
+
+# Phase-1 spike for human-like opponents: builds desktop lc0, fetches the
+# Maia per-rating nets, and plays them (nodes=1, pure policy — the
+# intended way to probe Maia) against Stockfish UCI_Elo anchors and
+# against RaiEngine at the same nominal label. The report in the "Play
+# calibration matches" step log answers two questions before any Android
+# integration work: does maia-1100 actually measure ~1100, and how does
+# our synthetic band compare to the human-like reference?
+on:
+  workflow_dispatch:
+    inputs:
+      games:
+        description: 'Games per pairing (more = tighter estimate, slower)'
+        required: false
+        default: '12'
+
+permissions:
+  contents: read
+
+env:
+  LC0_TAG: v0.31.2
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        cache-read-only: true
+
+    - name: Cache lc0 build
+      id: lc0-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/lc0-bin/lc0
+        key: lc0-${{ env.LC0_TAG }}-blas-${{ runner.os }}
+
+    - name: Build lc0 (BLAS backend)
+      if: steps.lc0-cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y meson ninja-build libopenblas-dev zlib1g-dev \
+          protobuf-compiler libprotobuf-dev
+        git clone --depth 1 -b "$LC0_TAG" --recurse-submodules \
+          https://github.com/LeelaChessZero/lc0.git ~/lc0-src
+        cd ~/lc0-src
+        ./build.sh release -Dgtest=false -Dblas=true
+        mkdir -p ~/lc0-bin
+        cp build/release/lc0 ~/lc0-bin/lc0
+
+    - name: Fetch Maia weights
+      run: |
+        mkdir -p ~/maia-weights
+        for band in 1100 1500; do
+          curl -sSL -o ~/maia-weights/maia-$band.pb.gz \
+            "https://github.com/CSSLab/maia-chess/raw/master/maia_weights/maia-$band.pb.gz"
+        done
+        ls -la ~/maia-weights
+
+    - name: Install anchor Stockfish
+      run: sudo apt-get update && sudo apt-get install -y stockfish
+
+    - name: Play calibration matches
+      # Inputs reach the shell via env, never ${{ }} inside run:
+      env:
+        GAMES: ${{ github.event.inputs.games || '12' }}
+      run: |
+        ./gradlew testDebugUnitTest \
+          --tests "com.raichess.calibration.MaiaCalibrationTest" \
+          -Draichess.calibrate.maia=true \
+          -Draichess.calibrate.games="$GAMES" \
+          -Dlc0.path="$HOME/lc0-bin/lc0" \
+          -Dmaia.weights.dir="$HOME/maia-weights" \
+          -Dstockfish.path="$(command -v stockfish)" \
+          --stacktrace

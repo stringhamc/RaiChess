@@ -63,16 +63,25 @@ android {
     }
 
     testOptions {
-        // Calibration-harness passthrough (see RaiEngineCalibrationTest):
-        // forwards the opt-in flag and Stockfish location from the Gradle
-        // JVM (-D on the command line) into the unit-test JVM, and echoes
-        // test stdout while calibrating so the report lands in the CI log.
+        // Calibration-harness passthrough (see RaiEngineCalibrationTest,
+        // MaiaCalibrationTest): forwards the opt-in flags and engine
+        // locations from the Gradle JVM (-D on the command line) into the
+        // unit-test JVM, and echoes test stdout while calibrating so the
+        // report lands in the CI log.
         unitTests.all { test ->
-            listOf("raichess.calibrate", "raichess.calibrate.games", "stockfish.path")
-                .forEach { key ->
-                    System.getProperty(key)?.let { test.systemProperty(key, it) }
-                }
-            if (System.getProperty("raichess.calibrate") == "true") {
+            listOf(
+                "raichess.calibrate",
+                "raichess.calibrate.maia",
+                "raichess.calibrate.games",
+                "stockfish.path",
+                "lc0.path",
+                "maia.weights.dir"
+            ).forEach { key ->
+                System.getProperty(key)?.let { test.systemProperty(key, it) }
+            }
+            if (System.getProperty("raichess.calibrate") == "true" ||
+                System.getProperty("raichess.calibrate.maia") == "true"
+            ) {
                 test.testLogging.showStandardStreams = true
             }
         }
