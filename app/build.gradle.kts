@@ -9,12 +9,34 @@ android {
     namespace = "com.raichess"
     compileSdk = 34
 
+    // CI builds get a monotonically increasing versionCode (the workflow
+    // run number) so each APK installs as an in-place UPDATE over the
+    // previous one — combined with the committed debug keystore below,
+    // that's what preserves game history between installs. Local builds
+    // fall back to a fixed code (installing a local build over a newer CI
+    // build is a downgrade Android will refuse; uninstall first for that).
+    val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+
+    signingConfigs {
+        // Fixed, committed debug keystore (standard android/android
+        // credentials — debug-only, never a release identity): without
+        // it, every CI runner generates a fresh random key, each APK
+        // looks like a different author, and Android forces an
+        // uninstall — wiping the game database — on every update.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.raichess"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = ciRunNumber?.plus(100) ?: 2
+        versionName = "1.1.0" + (ciRunNumber?.let { " (build $it)" } ?: " (local)")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -45,6 +67,7 @@ android {
         }
         debug {
             isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

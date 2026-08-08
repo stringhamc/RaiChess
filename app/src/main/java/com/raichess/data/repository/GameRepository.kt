@@ -59,10 +59,18 @@ class GameRepository(context: Context) {
 
     /**
      * The player's drillable analyzed mistakes (stored best move = answer
-     * key), newest games first, mapped for the practice queue.
+     * key), newest games first, mapped for the practice queue. Shallow
+     * fallback analyses (RaiEngine, depth 3) are excluded — their "best"
+     * moves aren't trustworthy enough to demand the player reproduce
+     * them; those games regain their drills once re-analyzed by a real
+     * engine (the analyzer-version requeue does this automatically).
      */
     suspend fun mistakeDrills(limit: Int = 100): List<DrillSelector.MistakeDrill> =
-        dao.mistakeDrillRows(MoveClassifier.MISTAKE_THRESHOLD_CP, limit).map { row ->
+        dao.mistakeDrillRows(
+            MoveClassifier.MISTAKE_THRESHOLD_CP,
+            GameAnalyzer.MIN_TRUSTED_DEPTH,
+            limit
+        ).map { row ->
             DrillSelector.MistakeDrill(
                 id = "mistake:${row.gameId}:${row.ply}",
                 fen = row.fen,

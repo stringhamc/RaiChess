@@ -11,6 +11,7 @@ import com.github.bhlangonijr.chesslib.Side
 import com.github.bhlangonijr.chesslib.Square
 import com.github.bhlangonijr.chesslib.move.Move
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
+import com.raichess.data.repository.DailyRepository
 import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.LessonRepository
 import com.raichess.data.repository.PlayerProfileRepository
@@ -61,6 +62,8 @@ data class PracticeUiState(
     val lessonTitle: String? = null,
     /** "3 of 8 solved" for the active lesson. */
     val lessonProgressText: String? = null,
+    /** The active lesson's concept intro (coach voice), when it has one. */
+    val lessonIntro: String? = null,
     /** True when every lesson in the current plan is complete. */
     val lessonComplete: Boolean = false,
     /**
@@ -84,6 +87,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     private val gameRepository = GameRepository(application)
     private val profileRepository = PlayerProfileRepository(application)
     private val lessonRepository = LessonRepository(application)
+    private val dailyRepository = DailyRepository(application)
 
     private var queue: List<DrillSelector.Drill> = emptyList()
     private var queueIndex = 0
@@ -144,13 +148,13 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             lessonJustCompleted = false
 
             if (source == DrillSelector.Source.LESSON) {
-                val plan = LessonPlanner.buildPlan(profile)
                 val solves = try {
                     lessonRepository.getSolves()
                 } catch (e: Exception) {
                     Log.w(TAG, "lesson progress unavailable", e)
                     emptyMap()
                 }
+                val plan = LessonPlanner.buildPlan(profile, targetRating, solves)
                 val lesson = LessonPlanner.activeLesson(plan, solves)
                 activeLessonUnit = lesson
                 if (lesson == null) {
@@ -160,6 +164,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                         lessonComplete = true,
                         lessonTitle = null,
                         lessonProgressText = null,
+                        lessonIntro = null,
                         lessonJustCompletedTitle = null,
                         practiceRating = targetRating
                     )
@@ -183,6 +188,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                     lessonTitle = lesson.title,
                     lessonProgressText =
                         "${(solves[lesson.id] ?: 0)} of ${lesson.targetSolves} solved",
+                    lessonIntro = lesson.intro,
                     lessonJustCompletedTitle = null,
                     practiceRating = targetRating
                 )
@@ -212,6 +218,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 lessonComplete = false,
                 lessonTitle = null,
                 lessonProgressText = null,
+                lessonIntro = null,
                 lessonJustCompletedTitle = null,
                 practiceRating = targetRating
             )
@@ -384,6 +391,8 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 Log.w(TAG, "failed to record drill result", e)
             }
         }
+        // Solved drills count toward the daily goal and streak
+        if (solved) dailyRepository.recordActivity()
         // Rated puzzles move the adaptive practice rating; own-mistake
         // drills have no rating to grade against
         val newRating = activePuzzle?.puzzle?.rating?.let { puzzleRating ->
@@ -461,14 +470,18 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Failed-drill reveal: the answer, plus — for own-mistake drills —
-     * why the original move was a mistake (spaced repetition will bring
-     * the position back, so failing is part of the loop, not an ending).
+     * WHICH move the original game mistake was and why it was one (field
+     * report: "your game move left a piece hanging" with the move unnamed
+     * read as an arbitrary claim the player couldn't check against the
+     * board). Spaced repetition will bring the position back, so failing
+     * is part of the loop, not an ending.
      */
     private fun failPrompt(revealLan: String?): String {
         val best = "Best was ${revealLan?.let { LanFormat.arrow(it) }}"
-        val why = activeMistake?.let { ThemeTag.explain(it.themes) }
-        return if (why != null) {
-            "$best — your game move $why."
+        val mistake = activeMistake
+        val why = mistake?.let { ThemeTag.explain(it.themes) }
+        return if (mistake != null && why != null) {
+            "In your game you played ${LanFormat.arrow(mistake.playedLan)}, which $why. $best."
         } else {
             "$best. It'll come back around."
         }

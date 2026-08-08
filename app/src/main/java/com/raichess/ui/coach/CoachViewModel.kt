@@ -4,12 +4,16 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.raichess.data.repository.DailyRepository
 import com.raichess.data.repository.GameRepository
 import com.raichess.data.repository.LessonRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.PlayerColor
+import com.raichess.domain.model.TrainingLoad
+import com.raichess.domain.model.TrainingStatus
 import com.raichess.domain.usecase.CoachAdvisor
+import com.raichess.domain.usecase.Curriculum
 import com.raichess.domain.usecase.LessonPlanner
 import com.raichess.domain.usecase.WeaknessProfile
 import kotlinx.coroutines.Job
@@ -29,6 +33,18 @@ data class CoachPlanRow(
     val active: Boolean
 )
 
+/** One curriculum step on the coach screen's ladder. */
+data class CoachStepRow(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val doneUnits: Int,
+    val totalUnits: Int,
+    val done: Boolean,
+    /** The step the plan currently draws its units from. */
+    val active: Boolean
+)
+
 data class CoachUiState(
     val loading: Boolean = true,
     val headline: String = "",
@@ -36,7 +52,13 @@ data class CoachUiState(
     val focuses: List<String> = emptyList(),
     val action: CoachAdvisor.Action = CoachAdvisor.Action.PLAY_GAME,
     val actionLabel: String = "",
-    val planRows: List<CoachPlanRow> = emptyList()
+    val steps: List<CoachStepRow> = emptyList(),
+    val planRows: List<CoachPlanRow> = emptyList(),
+    /** The coach's read on recent training load (null = no history). */
+    val trainingStatus: TrainingStatus? = null,
+    /** Games finished + drills solved today, toward [dailyGoal]. */
+    val dailySolved: Int = 0,
+    val dailyGoal: Int = TrainingLoad.DAILY_GOAL
 )
 
 /**
@@ -49,6 +71,7 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
     private val gameRepository = GameRepository(application)
     private val profileRepository = PlayerProfileRepository(application)
     private val lessonRepository = LessonRepository(application)
+    private val dailyRepository = DailyRepository(application)
 
     private val _uiState = MutableStateFlow(CoachUiState())
     val uiState: StateFlow<CoachUiState> = _uiState
@@ -70,13 +93,16 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 WeaknessProfile.EMPTY
             }
             val stats = profileRepository.getStats()
-            val plan = LessonPlanner.buildPlan(profile)
+            val practiceRating = profileRepository.getPracticeRating()
             val solves = try {
                 lessonRepository.getSolves()
             } catch (e: Exception) {
                 Log.w(TAG, "lesson progress unavailable", e)
                 emptyMap()
             }
+            val plan = LessonPlanner.buildPlan(profile, practiceRating, solves)
+            val activeStepId = Curriculum.activeStep(practiceRating, solves).id
+            val trainingStatus = dailyRepository.trainingStatus()
             val lastGameWasLoss = try {
                 gameRepository.recentGames(1).firstOrNull()?.let { game ->
                     val color = runCatching { PlayerColor.valueOf(game.playerColor) }
@@ -87,7 +113,9 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 Log.w(TAG, "last game unavailable", e)
                 false
             }
-            val advice = CoachAdvisor.advise(stats, profile, plan, solves, lastGameWasLoss)
+            val advice = CoachAdvisor.advise(
+                stats, profile, plan, solves, lastGameWasLoss, trainingStatus
+            )
             val active = LessonPlanner.activeLesson(plan, solves)
 
             _uiState.value = CoachUiState(
@@ -97,6 +125,20 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                 focuses = advice.focuses,
                 action = advice.action,
                 actionLabel = advice.actionLabel,
+                steps = Curriculum.STEPS.map { step ->
+                    val doneUnits = step.units.count {
+                        (solves[it.id] ?: 0) >= it.targetSolves
+                    }
+                    CoachStepRow(
+                        id = step.id,
+                        title = step.title,
+                        subtitle = step.subtitle,
+                        doneUnits = doneUnits,
+                        totalUnits = step.units.size,
+                        done = doneUnits == step.units.size,
+                        active = step.id == activeStepId
+                    )
+                },
                 planRows = plan.map { lesson ->
                     val done = (solves[lesson.id] ?: 0).coerceAtMost(lesson.targetSolves)
                     CoachPlanRow(
@@ -107,7 +149,9 @@ class CoachViewModel(application: Application) : AndroidViewModel(application) {
                         done = done >= lesson.targetSolves,
                         active = lesson.id == active?.id
                     )
-                }
+                },
+                trainingStatus = trainingStatus,
+                dailySolved = dailyRepository.countToday()
             )
         }
     }
