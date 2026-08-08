@@ -470,14 +470,18 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Failed-drill reveal: the answer, plus — for own-mistake drills —
-     * why the original move was a mistake (spaced repetition will bring
-     * the position back, so failing is part of the loop, not an ending).
+     * WHICH move the original game mistake was and why it was one (field
+     * report: "your game move left a piece hanging" with the move unnamed
+     * read as an arbitrary claim the player couldn't check against the
+     * board). Spaced repetition will bring the position back, so failing
+     * is part of the loop, not an ending.
      */
     private fun failPrompt(revealLan: String?): String {
         val best = "Best was ${revealLan?.let { LanFormat.arrow(it) }}"
-        val why = activeMistake?.let { ThemeTag.explain(it.themes) }
-        return if (why != null) {
-            "$best — your game move $why."
+        val mistake = activeMistake
+        val why = mistake?.let { ThemeTag.explain(it.themes) }
+        return if (mistake != null && why != null) {
+            "In your game you played ${LanFormat.arrow(mistake.playedLan)}, which $why. $best."
         } else {
             "$best. It'll come back around."
         }
