@@ -194,6 +194,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(animationsEnabled = enabled)
     }
 
+    /**
+     * One-tap play (home tile, coach action, play-again): White while the
+     * player is still finding their feet, a random side once they've
+     * graduated calibration — real chess is played from both colors, and
+     * an established player shouldn't accidentally train White-only. The
+     * setup screen's explicit choices are unaffected.
+     */
+    fun startQuickGame() {
+        val established =
+            (_uiState.value.playerStats?.gamesPlayed ?: 0) >= EloCalculator.PROVISIONAL_GAMES
+        startGame(randomColor = established)
+    }
+
     fun startGame(randomColor: Boolean = false) {
         val state = _uiState.value
         val color = if (randomColor) {

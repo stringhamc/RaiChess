@@ -158,7 +158,7 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                 screen = Screen.Home
                 viewModel.backToSetup()
             },
-            onPlayAgain = { viewModel.startGame(false) },
+            onPlayAgain = { viewModel.startQuickGame() },
             onReviewGame = {
                 screen = Screen.Review(Screen.LATEST_GAME)
                 viewModel.backToSetup()
@@ -200,8 +200,9 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                 dailySolved = coachState.dailySolved,
                 dailyGoal = coachState.dailyGoal,
                 // Straight into the game with the current setup; the tile's
-                // corner button is the path to the setup screen
-                onPlay = { viewModel.startGame(false) },
+                // corner button is the path to the setup screen. Random
+                // side once calibration is done (see startQuickGame).
+                onPlay = { viewModel.startQuickGame() },
                 onCustomizeGame = { screen = Screen.PlaySetup },
                 onTrain = { screen = Screen.Practice() },
                 onCoach = { screen = Screen.Coach },
@@ -259,7 +260,7 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                         // coach's "play a game" starts one, not a form
                         CoachAdvisor.Action.PLAY_GAME -> {
                             screen = Screen.Home
-                            viewModel.startGame(false)
+                            viewModel.startQuickGame()
                         }
                         CoachAdvisor.Action.START_LESSON ->
                             screen = Screen.Practice(openLesson = true)
