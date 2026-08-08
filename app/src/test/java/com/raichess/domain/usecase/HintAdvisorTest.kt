@@ -64,6 +64,36 @@ class HintAdvisorTest {
     }
 
     @Test
+    fun `level one names black's pieces correctly too`() {
+        val blackToMove = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+        val hint = HintAdvisor.hint(1, cp(-20, "g8f6"), blackToMove)!!
+        assertEquals("Look at your knight on g8.", hint.text)
+        assertEquals(setOf(62), hint.highlights)
+    }
+
+    @Test
+    fun `level one degrades to 'piece' when the from-square is empty`() {
+        // A stale or mismatched analysis (best move's origin square empty
+        // in the given FEN) must degrade the wording, never crash or
+        // invent a piece — the ViewModel's FEN guard is the real defense,
+        // this is the last line
+        val bareKings = "4k3/8/8/8/8/8/8/4K3 w - - 0 1"
+        val hint = HintAdvisor.hint(1, cp(0, "d1h5"), bareKings)!!
+        assertEquals("Look at your piece on d1.", hint.text)
+    }
+
+    @Test
+    fun `highlights always match the best move's squares`() {
+        // The squares the board lights up must be exactly the move the
+        // text describes — a mismatch would point the player at the
+        // wrong part of the board
+        for (level in 2..HintAdvisor.MAX_LEVEL) {
+            val hint = HintAdvisor.hint(level, cp(10, "b1c3"), startFen)!!
+            assertEquals(setOf(1, 18), hint.highlights)
+        }
+    }
+
+    @Test
     fun `no hint without a best move or for out-of-range levels`() {
         assertNull(HintAdvisor.hint(1, cp(0, null), startFen))
         assertNull(HintAdvisor.hint(0, cp(0, "e2e4"), startFen))

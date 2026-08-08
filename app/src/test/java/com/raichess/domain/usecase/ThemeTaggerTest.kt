@@ -106,6 +106,56 @@ class ThemeTaggerTest {
     }
 
     @Test
+    fun `defended piece attacked by equal value is NOT hanging`() {
+        // Ng1-f3 with a black knight on e5 eyeing f3: the knight is
+        // attacked, but g2/e2 defend it and the attacker isn't cheaper —
+        // Nxf3 gxf3 is a trade, not free material. Field reports of
+        // bogus "left a piece where it could be taken for free" make
+        // this precision case the one worth pinning down.
+        val tags = ThemeTagger.tag(
+            fenBefore = "rnbqkb1r/pppp1ppp/8/4n3/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 3",
+            ply = 4,
+            moveLan = "g1f3",
+            analysis = cp(30, "d2d4"),
+            nextAnalysis = cp(120, "d7d5"),
+            lossCp = 150
+        )
+        assertFalse(ThemeTag.HANGING_PIECE in tags)
+    }
+
+    @Test
+    fun `defended piece attacked by a cheaper piece IS hanging`() {
+        // Nb1-c3?? with a black pawn on b4: b2/d2 defend c3, but the
+        // pawn takes the knight and any recapture wins only a pawn back
+        val tags = ThemeTagger.tag(
+            fenBefore = "rnbqkbnr/p1pppppp/8/8/1p6/8/PPPPPPPP/RNBQKBNR w KQkq - 0 3",
+            ply = 4,
+            moveLan = "b1c3",
+            analysis = cp(30, "d2d4"),
+            nextAnalysis = cp(250, "b4c3"),
+            lossCp = 220
+        )
+        assertTrue(ThemeTag.HANGING_PIECE in tags)
+    }
+
+    @Test
+    fun `an unattacked piece is never hanging, even on a graded mistake`() {
+        // A quiet positional mistake: a2a3 loses ground on the eval but
+        // nothing attacks a3 — the tagger must not invent a hang
+        val tags = ThemeTagger.tag(
+            fenBefore = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            ply = 0,
+            moveLan = "a2a3",
+            analysis = cp(20, "d2d4"),
+            nextAnalysis = cp(130, "e7e5"),
+            lossCp = 150
+        )
+        assertFalse(ThemeTag.HANGING_PIECE in tags)
+        assertFalse(ThemeTag.ALLOWED_TACTIC in tags)
+        assertTrue(ThemeTag.OPENING in tags)
+    }
+
+    @Test
     fun `phase tags follow piece count then ply`() {
         // Full board late in the game: middlegame
         val middlegame = ThemeTagger.tag(
