@@ -154,6 +154,16 @@ class GameAnalyzer(
         /** Per-position budget: deep enough to grade honestly, ~15s for a 60-ply game. */
         const val DEFAULT_MOVE_TIME_MS = 250L
 
+        /**
+         * Minimum search depth for a stored best move to serve as a drill
+         * answer key. The RaiEngine fallback analyzer searches 3 plies
+         * with a material+piece-square eval — honest enough to grade a
+         * whole game roughly, not to dictate single best moves (field
+         * report: a depth-3 "best" hung two pieces). Real Stockfish at
+         * 250ms reaches ~10+.
+         */
+        const val MIN_TRUSTED_DEPTH = 6
+
         private const val NEUTRAL_ACCURACY = 50.0
 
         /**
