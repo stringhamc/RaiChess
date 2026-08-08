@@ -82,3 +82,7 @@ Thumbs.db
 # Log Files
 *.log
 __pycache__/
+
+# The committed debug keystore is intentional (stable APK signature so
+# updates preserve app data); see app/build.gradle.kts signingConfigs
+!app/debug.keystore
