@@ -274,7 +274,10 @@ class MaiaEngine(
         fun binaryFile(context: Context): File =
             File(context.applicationInfo.nativeLibraryDir, "liblc0.so")
 
-        private fun assetPath(band: Int) = "maia/maia-$band.pb.gz"
+        // .net, not .pb.gz: gz-suffixed assets were silently dropped from
+        // the packaged APK (see the CI weights step); the content is the
+        // gzipped net regardless, and extraction restores the real name
+        private fun assetPath(band: Int) = "maia/maia-$band.net"
 
         /** True when this APK carries both the lc0 binary and the net. */
         fun isAvailable(context: Context, band: Int): Boolean {

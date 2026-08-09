@@ -70,7 +70,7 @@ jobs:
         path: |
           app/src/main/jniLibs
           app/src/main/assets/maia
-        key: lc0-android-${{ env.LC0_TAG }}-maia-v2
+        key: lc0-android-${{ env.LC0_TAG }}-maia-v3
 
     - name: Cross-build lc0 for Android
       if: steps.lc0-android-cache.outputs.cache-hit != 'true'
@@ -103,10 +103,15 @@ jobs:
 
     - name: Fetch Maia weights
       if: steps.lc0-android-cache.outputs.cache-hit != 'true'
+      # Stored with a .net extension: .gz-suffixed assets were silently
+      # absent from the packaged APK (first integration run), so the asset
+      # name avoids the special-cased extension entirely. The content is
+      # still the gzipped net; MaiaEngine restores the .pb.gz name when it
+      # extracts to filesDir for lc0.
       run: |
         mkdir -p app/src/main/assets/maia
         for band in $MAIA_BANDS; do
-          curl -sSL -o "app/src/main/assets/maia/maia-$band.pb.gz" \
+          curl -sSL -o "app/src/main/assets/maia/maia-$band.net" \
             "https://github.com/CSSLab/maia-chess/raw/master/maia_weights/maia-$band.pb.gz"
         done
         ls -la app/src/main/assets/maia
@@ -130,9 +135,11 @@ jobs:
             exit 1
           fi
         done
+        echo "APK maia assets:"
+        unzip -l "$APK" | grep 'assets/maia' || true
         for band in $MAIA_BANDS; do
-          if ! unzip -l "$APK" | grep -q "assets/maia/maia-$band.pb.gz"; then
-            echo "::error::maia-$band.pb.gz missing from assets — the weights step broke"
+          if ! unzip -l "$APK" | grep -q "assets/maia/maia-$band.net"; then
+            echo "::error::maia-$band.net missing from assets — the weights step broke"
             exit 1
           fi
         done
