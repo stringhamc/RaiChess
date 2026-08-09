@@ -16,6 +16,10 @@ class DrillSelectorTest {
     private fun puzzle(id: String, rating: Int, vararg themes: String) =
         Puzzle(id, "fen-$id", listOf("e2e4", "e7e5"), rating, themes.toSet())
 
+    /** A two-player-move line (setup + move, reply, move). */
+    private fun multiPuzzle(id: String, rating: Int, vararg themes: String) =
+        Puzzle(id, "fen-$id", listOf("e2e4", "e7e5", "g1f3", "b8c6"), rating, themes.toSet())
+
     private fun mistake(id: String) = DrillSelector.MistakeDrill(
         id = id, fen = "fen-$id", bestMoveLan = "e2e4", playedLan = "a2a3",
         themes = setOf(ThemeTag.HANGING_PIECE)
@@ -232,6 +236,71 @@ class DrillSelectorTest {
         assertEquals(queueAt(now), queueAt(now))
         // 8 equal-rating puzzles: some nearby seed must produce a new order
         assertTrue((1L..5L).any { queueAt(now + it) != queueAt(now) })
+    }
+
+    @Test
+    fun `sessions guarantee a share of multi-move lines when the pool has them`() {
+        // 6 single-movers outrank the multis in the shuffle-agnostic sense
+        // (all equal priority), so without the variety guarantee a session
+        // could easily select zero multi-move lines
+        val singles = (1..6).map { puzzle("s$it", 800, "theme$it") }
+        val multis = listOf(
+            multiPuzzle("m1", 850, "fork"),
+            multiPuzzle("m2", 860, "pin")
+        )
+        val queue = DrillSelector.buildQueue(
+            source = DrillSelector.Source.PUZZLES,
+            mistakes = emptyList(),
+            puzzles = singles + multis,
+            progressById = emptyMap(),
+            targetRating = 800,
+            weaknesses = emptyList(),
+            nowMs = now,
+            limit = 6
+        ).map { it.puzzle!! }
+        assertEquals(6, queue.size)
+        // limit/3 = 2: both multi-move lines must make the session
+        assertEquals(2, queue.count { it.playerMoveCount >= 2 })
+    }
+
+    @Test
+    fun `an all-single-move pool is served unchanged`() {
+        val queue = DrillSelector.buildQueue(
+            source = DrillSelector.Source.PUZZLES,
+            mistakes = emptyList(),
+            puzzles = (1..6).map { puzzle("s$it", 800, "theme$it") },
+            progressById = emptyMap(),
+            targetRating = 800,
+            weaknesses = emptyList(),
+            nowMs = now,
+            limit = 6
+        )
+        assertEquals(6, queue.size)
+        assertTrue(queue.all { it.puzzle!!.playerMoveCount == 1 })
+    }
+
+    @Test
+    fun `lesson queues also guarantee multi-move variety`() {
+        val lesson = LessonPlanner.Lesson(
+            id = "core:tactics", title = "t", description = "",
+            themes = setOf("fork")
+        )
+        val singles = (1..6).map { puzzle("s$it", 800, "fork") }
+        val multis = listOf(
+            multiPuzzle("m1", 850, "fork"),
+            multiPuzzle("m2", 860, "fork")
+        )
+        val queue = DrillSelector.buildLessonQueue(
+            lesson = lesson,
+            mistakes = emptyList(),
+            puzzles = singles + multis,
+            progressById = emptyMap(),
+            targetRating = 800,
+            nowMs = now,
+            limit = 6
+        ).mapNotNull { it.puzzle }
+        assertEquals(6, queue.size)
+        assertEquals(2, queue.count { it.playerMoveCount >= 2 })
     }
 
     @Test

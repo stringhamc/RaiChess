@@ -260,7 +260,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 playerIsWhite = running.solverSide == Side.WHITE,
                 phase = DrillPhase.SOLVING,
                 prompt = promptFor(running.solverSide),
-                sourceLabel = "Puzzle · ${puzzle.rating}",
+                sourceLabel = if (puzzle.playerMoveCount >= 2) {
+                    "Puzzle · ${puzzle.rating} · ${puzzle.playerMoveCount}-move line"
+                } else {
+                    "Puzzle · ${puzzle.rating}"
+                },
                 selectedSquare = null,
                 legalTargets = emptySet(),
                 revealHighlights = emptySet()

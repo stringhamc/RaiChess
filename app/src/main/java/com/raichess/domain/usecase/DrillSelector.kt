@@ -168,10 +168,10 @@ object DrillSelector {
                     it.rating <= targetRating + LESSON_WINDOW_ABOVE
             }
             .ifEmpty { themed }
-        val selected = inWindow
+        val ranked = inWindow
             .shuffled(Random(nowMs))
             .sortedByDescending { isDue(progressById["puzzle:${it.id}"], nowMs) }
-            .take(limit)
+        val selected = ensureLineVariety(ranked.take(limit), ranked)
         val (due, notDue) = selected.partition { isDue(progressById["puzzle:${it.id}"], nowMs) }
         val puzzleQueue = (
             spaceOutThemes(due.sortedBy { it.rating }) +
@@ -220,17 +220,51 @@ object DrillSelector {
             .filter { kotlin.math.abs(it.rating - targetRating) <= RATING_WINDOW }
             .ifEmpty { puzzles }
         // Stable sorts preserve the shuffle among equal-priority puzzles
-        val selected = inWindow
+        val ranked = inWindow
             .shuffled(Random(nowMs))
             .sortedWith(
                 compareByDescending<Puzzle> { isDue(progress["puzzle:${it.id}"], nowMs) }
                     .thenByDescending { it.themes.any { t -> t in targetThemes } }
                     .thenByDescending { it.themes.any { t -> t in phaseThemes } }
             )
-            .take(limit)
+        val selected = ensureLineVariety(ranked.take(limit), ranked)
         val (due, notDue) = selected.partition { isDue(progress["puzzle:${it.id}"], nowMs) }
         return spaceOutThemes(due.sortedBy { it.rating }) +
             spaceOutThemes(notDue.sortedBy { it.rating })
+    }
+
+    /** Minimum share of a session's puzzles that should play a 2+ move line. */
+    private const val MULTI_MOVE_MIN_DIVISOR = 3
+
+    /**
+     * Guarantee line variety: single-move puzzles dominate low-rating
+     * pools (mate-in-one, hanging pieces), so a session can end up
+     * entirely one-movers (field report). Ensure at least a third of the
+     * selection plays a multi-move line when the candidate pool has any,
+     * swapping out the lowest-priority single-move picks. [ranked] is the
+     * full priority-ordered pool the selection was taken from, so the
+     * substitutes respect due-ness and weakness preference.
+     */
+    private fun ensureLineVariety(selected: List<Puzzle>, ranked: List<Puzzle>): List<Puzzle> {
+        if (selected.isEmpty()) return selected
+        val want = selected.size / MULTI_MOVE_MIN_DIVISOR
+        val have = selected.count { it.playerMoveCount >= 2 }
+        if (have >= want) return selected
+        val selectedIds = selected.mapTo(HashSet()) { it.id }
+        val extras = ranked
+            .filter { it.playerMoveCount >= 2 && it.id !in selectedIds }
+            .take(want - have)
+        if (extras.isEmpty()) return selected
+        val result = selected.toMutableList()
+        var toDrop = extras.size
+        for (i in result.indices.reversed()) {
+            if (toDrop == 0) break
+            if (result[i].playerMoveCount < 2) {
+                result.removeAt(i)
+                toDrop--
+            }
+        }
+        return result + extras
     }
 
     /**
