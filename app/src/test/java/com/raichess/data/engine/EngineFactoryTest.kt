@@ -41,6 +41,20 @@ class EngineFactoryTest {
     }
 
     @Test
+    fun `the eased band ramps lapses from the soft floor to zero at maia's floor`() {
+        // Outside the seam: no easing
+        assertEquals(0.0, EngineFactory.maiaSoftBlunderFor(949), 1e-9)
+        assertEquals(0.0, EngineFactory.maiaSoftBlunderFor(1100), 1e-9)
+        assertEquals(0.0, EngineFactory.maiaSoftBlunderFor(2000), 1e-9)
+        // Inside: linear ramp, ~18% at the soft floor, vanishing at 1100
+        assertEquals(0.18, EngineFactory.maiaSoftBlunderFor(950), 1e-9)
+        assertEquals(0.06, EngineFactory.maiaSoftBlunderFor(1050), 1e-9)
+        assertTrue(
+            EngineFactory.maiaSoftBlunderFor(1099) < EngineFactory.maiaSoftBlunderFor(951)
+        )
+    }
+
+    @Test
     fun `maia and stockfish bands never overlap`() {
         for (elo in 400..2800 step 50) {
             val maia = MaiaEngine.netBandFor(elo) != null

@@ -40,36 +40,39 @@ class RaiEngine(
 
     override val activeEngineLabel: String get() = "RaiEngine"
 
-    // Curve recalibrated on field feedback: the original mapping made the
-    // upper bands far weaker than their labels (an "1100" playing a purely
-    // random move every fifth turn on a 2-ply search was crushed by a
-    // ~600-rated player). Labels remain heuristic, but the mid band now
-    // searches deeper, blunders far less, and picks closer to the best.
+    // Curve compressed after the Maia integration: RaiEngine now serves
+    // only 400-949 as an opponent (the eased Maia band takes over from
+    // 950 — see EngineFactory), and engine-vs-engine calibration measured
+    // the old curve's whole top far below its labels. The dial therefore
+    // climbs to RaiEngine's honest maximum *within* its serving range, so
+    // the handoff to eased maia-1100 is a slope, not a cliff. Higher ELOs
+    // remain defined because RaiEngine is every engine's fallback.
 
     /** Full-move search depth in plies. */
     val searchDepth: Int = when {
-        elo < 800 -> 1
-        elo < 1100 -> 2
-        elo < 1800 -> 3
+        elo < 550 -> 1
+        elo < 700 -> 2
+        elo < 1400 -> 3
         else -> 4
     }
 
     /** Probability of playing a completely random legal move. */
     val blunderChance: Double = when {
-        elo < 500 -> 0.50   // near-random beginner bot
-        elo < 700 -> 0.30
-        elo < 900 -> 0.18
-        elo < 1100 -> 0.10
-        elo < 1300 -> 0.05
-        elo < 1600 -> 0.02
+        elo < 450 -> 0.50   // near-random beginner bot
+        elo < 550 -> 0.35
+        elo < 650 -> 0.22
+        elo < 750 -> 0.14
+        elo < 850 -> 0.08
+        elo < 950 -> 0.04
+        elo < 1300 -> 0.02
         else -> 0.0
     }
 
     /** Moves within this many centipawns of the best are candidates at lower ELOs. */
     private val candidateWindow: Int = when {
-        elo < 700 -> 200
-        elo < 1000 -> 120
-        elo < 1400 -> 60
+        elo < 500 -> 200
+        elo < 650 -> 120
+        elo < 850 -> 60
         elo < 2000 -> 25
         else -> 0
     }

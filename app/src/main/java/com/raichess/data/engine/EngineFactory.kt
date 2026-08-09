@@ -31,12 +31,37 @@ object EngineFactory {
      */
     const val LEGACY_STOCKFISH_MIN_ELO = 1350
 
+    /**
+     * The seam smoother: from here up to Maia's floor the opponent is
+     * maia-1100 with a lapse rate that ramps to zero at 1100, so
+     * climbing out of the RaiEngine band meets a slope, not a cliff
+     * (calibration measured RaiEngine's top far below its label, and
+     * maia-1100 beating it 12-0).
+     */
+    const val MAIA_SOFT_MIN_ELO = 950
+
+    private const val SOFT_BLUNDER_PER_ELO_POINT = 0.0012
+
     /** Pure band-selection predicate, extracted for unit testing. */
     fun usesStockfish(targetElo: Int): Boolean = targetElo >= STOCKFISH_MIN_ELO
 
+    /**
+     * Lapse probability for the eased band: 0 at Maia's floor, ~0.18 at
+     * [MAIA_SOFT_MIN_ELO], 0 everywhere Maia serves natively or not at
+     * all. Pure, tested.
+     */
+    fun maiaSoftBlunderFor(targetElo: Int): Double =
+        if (targetElo in MAIA_SOFT_MIN_ELO until MaiaEngine.MAIA_MIN_ELO) {
+            (MaiaEngine.MAIA_MIN_ELO - targetElo) * SOFT_BLUNDER_PER_ELO_POINT
+        } else {
+            0.0
+        }
+
     fun create(context: Context, targetElo: Int): ChessEngine {
         val stockfish = usesStockfish(targetElo)
+        val softBlunder = maiaSoftBlunderFor(targetElo)
         val maiaBand = MaiaEngine.netBandFor(targetElo)
+            ?: MaiaEngine.BUNDLED_BANDS.first().takeIf { softBlunder > 0 }
         val maia = maiaBand != null && MaiaEngine.isAvailable(context, maiaBand)
         // No Maia in this build: the band splits the old way (1350+
         // Stockfish, below RaiEngine)
@@ -47,6 +72,7 @@ object EngineFactory {
         // that follow, and makes both the band routing and the chosen
         // backend visible
         val backend = when {
+            maia && softBlunder > 0 -> "Maia $maiaBand (eased)"
             maia -> "Maia $maiaBand"
             stockfish || legacyStockfish ->
                 if (native) "Stockfish (native)" else "Stockfish (wasm)"
@@ -55,7 +81,12 @@ object EngineFactory {
         EngineDiagnostics.record(context, "game start: targetElo $targetElo → $backend")
 
         return when {
-            maia -> MaiaEngine(context, maiaBand!!, fallback = RaiEngine(targetElo))
+            maia -> MaiaEngine(
+                context,
+                maiaBand!!,
+                fallback = RaiEngine(targetElo),
+                blunderChance = softBlunder
+            )
             stockfish || legacyStockfish ->
                 if (native) {
                     StockfishNativeEngine(context, targetElo, fallback = RaiEngine(targetElo))

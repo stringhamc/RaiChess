@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.move.Move
+import com.github.bhlangonijr.chesslib.move.MoveGenerator
 import com.raichess.data.diagnostics.EngineDiagnostics
 import com.raichess.domain.model.PositionAnalysis
 import java.io.BufferedReader
@@ -14,6 +15,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 /**
  * Human-like opponent: a Maia neural net (CSSLab's per-rating predictors
@@ -38,7 +40,14 @@ class MaiaEngine(
     context: Context,
     /** Net band (1100..1500 in 100s) — see [netBandFor]. */
     private val band: Int,
-    private val fallback: ChessEngine
+    private val fallback: ChessEngine,
+    /**
+     * Probability of a random legal "lapse" move instead of the net's
+     * choice — the easing that extends maia-1100 below its floor (see
+     * EngineFactory.maiaSoftBlunderFor). 0 = the pure net.
+     */
+    private val blunderChance: Double = 0.0,
+    private val random: Random = Random.Default
 ) : ChessEngine {
 
     private val appContext = context.applicationContext
@@ -57,12 +66,14 @@ class MaiaEngine(
 
     private enum class State { UNINITIALIZED, READY, FAILED }
 
+    private val maiaLabel = if (blunderChance > 0) "Maia $band (eased)" else "Maia $band"
+
     override val activeEngineLabel: String
         get() = when {
-            state == State.READY && everFellBack -> "Maia $band (recovered)"
-            state == State.READY -> "Maia $band"
+            state == State.READY && everFellBack -> "$maiaLabel (recovered)"
+            state == State.READY -> maiaLabel
             everFellBack || state == State.FAILED -> "RaiEngine (fallback)"
-            else -> "Maia $band"
+            else -> maiaLabel
         }
 
     override fun warmUp() {
@@ -75,6 +86,13 @@ class MaiaEngine(
 
     override fun selectMove(board: Board): Move? {
         return try {
+            // The easing lapse rolls before the net is consulted: a
+            // random legal move, exactly RaiEngine's weakness mechanism,
+            // so sub-floor settings err more without erring differently
+            if (blunderChance > 0 && random.nextDouble() < blunderChance) {
+                val legal = MoveGenerator.generateLegalMoves(board)
+                if (legal.isNotEmpty()) return legal[random.nextInt(legal.size)]
+            }
             if (!ensureReady()) {
                 if (released) return null
                 return fallbackMove(board, "maia unavailable (init failed)")
