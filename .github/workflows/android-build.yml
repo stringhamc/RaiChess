@@ -29,6 +29,10 @@ on:
       - 'gradlew.bat'
       - '.github/workflows/**'
 
+env:
+  LC0_TAG: v0.31.2
+  MAIA_BANDS: "1100 1200 1300 1400 1500"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -54,10 +58,54 @@ jobs:
       with:
         cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
 
+    # ---- Maia opponents: native lc0 + per-rating nets --------------------
+    # lc0 cross-compiles per ABI (Eigen CPU backend — header-only, no BLAS
+    # to cross-build) and lands in jniLibs like the Stockfish binary; the
+    # Maia weights land in assets. Both cached by lc0 tag.
+
+    - name: Cache lc0 Android binaries
+      id: lc0-android-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          app/src/main/jniLibs
+          app/src/main/assets/maia
+        key: lc0-android-${{ env.LC0_TAG }}-maia-v1
+
+    - name: Cross-build lc0 for Android
+      if: steps.lc0-android-cache.outputs.cache-hit != 'true'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y meson ninja-build protobuf-compiler
+        export PATH="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+        git clone --depth 1 -b "$LC0_TAG" --recurse-submodules \
+          https://github.com/LeelaChessZero/lc0.git ~/lc0-src
+        cd ~/lc0-src
+        for abi in arm64-v8a armeabi-v7a; do
+          meson setup "build-$abi" \
+            --cross-file "$GITHUB_WORKSPACE/tools/lc0-android/$abi.txt" \
+            --buildtype=release \
+            -Dgtest=false -Dblas=false -Deigen=true -Dopencl=false
+          ninja -C "build-$abi" lc0
+          mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/$abi"
+          cp "build-$abi/lc0" "$GITHUB_WORKSPACE/app/src/main/jniLibs/$abi/liblc0.so"
+        done
+
+    - name: Fetch Maia weights
+      if: steps.lc0-android-cache.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p app/src/main/assets/maia
+        for band in $MAIA_BANDS; do
+          curl -sSL -o "app/src/main/assets/maia/maia-$band.pb.gz" \
+            "https://github.com/CSSLab/maia-chess/raw/master/maia_weights/maia-$band.pb.gz"
+        done
+        ls -la app/src/main/assets/maia
+    # ----------------------------------------------------------------------
+
     - name: Build with Gradle
       run: ./gradlew assembleDebug --stacktrace
 
-    - name: Verify native Stockfish is packaged
+    - name: Verify native engines and Maia nets are packaged
       run: |
         APK=app/build/outputs/apk/debug/app-debug.apk
         echo "APK native libs:"
@@ -67,8 +115,18 @@ jobs:
             echo "::error::libstockfish.so missing for $abi — the executable-as-jniLib packaging broke"
             exit 1
           fi
+          if ! unzip -l "$APK" | grep -q "lib/$abi/liblc0.so"; then
+            echo "::error::liblc0.so missing for $abi — the lc0 cross-build or jniLibs packaging broke"
+            exit 1
+          fi
         done
-        echo "libstockfish.so present for all ABIs"
+        for band in $MAIA_BANDS; do
+          if ! unzip -l "$APK" | grep -q "assets/maia/maia-$band.pb.gz"; then
+            echo "::error::maia-$band.pb.gz missing from assets — the weights step broke"
+            exit 1
+          fi
+        done
+        echo "libstockfish.so, liblc0.so, and all Maia nets present"
 
     - name: Run unit tests
       run: ./gradlew testDebugUnitTest --stacktrace

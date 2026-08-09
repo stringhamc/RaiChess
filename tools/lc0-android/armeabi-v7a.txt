@@ -1,0 +1,19 @@
+# Meson cross file for building lc0 against the Android NDK (armv7).
+# Binary names resolve via PATH — the CI step prepends the NDK's
+# llvm/prebuilt/linux-x86_64/bin. API 24 matches the app's minSdk.
+[binaries]
+c = 'armv7a-linux-androideabi24-clang'
+cpp = 'armv7a-linux-androideabi24-clang++'
+ar = 'llvm-ar'
+strip = 'llvm-strip'
+
+[host_machine]
+system = 'android'
+cpu_family = 'arm'
+cpu = 'armv7a'
+endian = 'little'
+
+[built-in options]
+cpp_args = ['-O3', '-mfpu=neon']
+# Executables must be position-independent on modern Android
+cpp_link_args = ['-static-libstdc++', '-pie']

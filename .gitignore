@@ -86,3 +86,7 @@ __pycache__/
 # The committed debug keystore is intentional (stable APK signature so
 # updates preserve app data); see app/build.gradle.kts signingConfigs
 !app/debug.keystore
+
+# CI-generated native engines + Maia nets (see android-build.yml)
+app/src/main/jniLibs/
+app/src/main/assets/maia/
