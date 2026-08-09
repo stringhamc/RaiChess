@@ -70,13 +70,19 @@ jobs:
         path: |
           app/src/main/jniLibs
           app/src/main/assets/maia
-        key: lc0-android-${{ env.LC0_TAG }}-maia-v1
+        key: lc0-android-${{ env.LC0_TAG }}-maia-v2
 
     - name: Cross-build lc0 for Android
       if: steps.lc0-android-cache.outputs.cache-hit != 'true'
+      # v0.31.2's CPU path is the 'blas' backend; with every BLAS library
+      # disabled it builds on Eigen, which meson pulls as a header-only
+      # wrap subproject — ideal for cross-compilation. Protos compile via
+      # a bundled python script, so no protobuf toolchain is needed. The
+      # x86-only ISA options (popcnt/f16c/pext) and GPU/vendor backends
+      # are switched off explicitly for the ARM cross target.
       run: |
         sudo apt-get update
-        sudo apt-get install -y meson ninja-build protobuf-compiler
+        sudo apt-get install -y meson ninja-build
         export PATH="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
         git clone --depth 1 -b "$LC0_TAG" --recurse-submodules \
           https://github.com/LeelaChessZero/lc0.git ~/lc0-src
@@ -85,7 +91,11 @@ jobs:
           meson setup "build-$abi" \
             --cross-file "$GITHUB_WORKSPACE/tools/lc0-android/$abi.txt" \
             --buildtype=release \
-            -Dgtest=false -Dblas=false -Deigen=true -Dopencl=false
+            -Dgtest=false -Dblas=true \
+            -Dmkl=false -Dopenblas=false -Daccelerate=false -Ddnnl=false \
+            -Dopencl=false -Dcudnn=false -Dplain_cuda=false -Dnative_cuda=false \
+            -Ddx=false -Dispc=false -Dtensorflow=false -Donednn=false \
+            -Dpopcnt=false -Df16c=false -Dpext=false
           ninja -C "build-$abi" lc0
           mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/$abi"
           cp "build-$abi/lc0" "$GITHUB_WORKSPACE/app/src/main/jniLibs/$abi/liblc0.so"
