@@ -136,6 +136,57 @@ class StockfishNativeEngine(
         }
     }
 
+    /**
+     * MultiPV analysis for drill-alternative mining. Same single-caller
+     * contract; MultiPV is restored to 1 afterwards so ordinary analysis
+     * and play are unaffected. Falls back to the single-line default on
+     * any failure — alternatives are an enhancement, never a requirement.
+     */
+    override fun analyzeTop(board: Board, moveTimeMs: Long, multiPv: Int): List<PositionAnalysis> {
+        if (multiPv <= 1) return listOfNotNull(analyze(board, moveTimeMs))
+        return try {
+            if (!ensureReady() || released) {
+                return listOfNotNull(analyze(board, moveTimeMs))
+            }
+            val liftSkillLimit = !analysisMode && config.skillLevel < MAX_SKILL_LEVEL
+            if (liftSkillLimit) send("setoption name Skill Level value $MAX_SKILL_LEVEL")
+            send("setoption name MultiPV value $multiPv")
+            try {
+                output.clear()
+                send("position fen ${board.fen}")
+                send("go movetime $moveTimeMs")
+                // Deepest exact-score info per PV index wins, same rule as
+                // the single-line path
+                val latest = HashMap<Int, UciInfoParser.UciInfo>()
+                val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { line ->
+                    UciInfoParser.parse(line)?.let { info ->
+                        if (!info.isBound && info.multipv >= 1) latest[info.multipv] = info
+                    }
+                    line.startsWith("bestmove")
+                }
+                if (best == null || latest.isEmpty()) {
+                    return listOfNotNull(analyze(board, moveTimeMs))
+                }
+                latest.entries.sortedBy { it.key }.mapNotNull { (_, info) ->
+                    val lan = info.pv.firstOrNull()?.lowercase() ?: return@mapNotNull null
+                    PositionAnalysis(
+                        scoreCp = info.scoreCp,
+                        mateIn = info.scoreMate,
+                        bestMoveLan = lan,
+                        pv = info.pv.map { it.lowercase() },
+                        depth = info.depth
+                    )
+                }
+            } finally {
+                send("setoption name MultiPV value 1")
+                if (liftSkillLimit) config.getUciCommands().forEach { send(it) }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "analyzeTop failed; single-line fallback", e)
+            listOfNotNull(analyze(board, moveTimeMs))
+        }
+    }
+
     private fun analyzeAtCurrentStrength(board: Board, moveTimeMs: Long): PositionAnalysis? {
         output.clear()
         // No ucinewgame between analyses: a warm transposition table is

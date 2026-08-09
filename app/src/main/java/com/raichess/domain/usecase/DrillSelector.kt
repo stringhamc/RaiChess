@@ -46,7 +46,13 @@ object DrillSelector {
          * ordering (mistakes sort by due-ness + recency only); carried so
          * a future weakness-first mistake ordering can mirror puzzles.
          */
-        val themes: Set<ThemeTag>
+        val themes: Set<ThemeTag>,
+        /**
+         * Moves ~as good as [bestMoveLan] (MultiPV mining) — the drill
+         * accepts any of them, since open positions often have several
+         * fine moves. Empty for rows analyzed before v4.
+         */
+        val acceptableLans: Set<String> = emptySet()
     )
 
     /** Puzzles this far from the player's ELO are filtered out. */

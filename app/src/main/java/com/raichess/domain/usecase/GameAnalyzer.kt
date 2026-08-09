@@ -42,6 +42,13 @@ class GameAnalyzer(
         val classification: MoveClassification?,
         /** Mistake themes (player moves at mistake-or-worse loss only). */
         val themes: Set<ThemeTag> = emptySet(),
+        /**
+         * Moves ~as good as [bestMoveLan] (graded player mistakes only,
+         * MultiPV mining): open positions often have several fine moves,
+         * and a drill demanding the engine's exact pick reads as
+         * arbitrary. Empty when the engine can't do MultiPV.
+         */
+        val acceptableMoves: List<String> = emptyList(),
         val depth: Int
     )
 
@@ -111,6 +118,12 @@ class GameAnalyzer(
                 emptySet()
             }
 
+            val classification = if (isPlayerMove) {
+                MoveClassifier.classify(evalBeforeStm, -evalAfterNextStm, playedBest)
+            } else {
+                null
+            }
+
             MoveReport(
                 ply = i,
                 fen = step.fen,
@@ -120,12 +133,13 @@ class GameAnalyzer(
                 evaluationCp = if (step.whiteToMove) evalBeforeStm else -evalBeforeStm,
                 bestMoveLan = step.analysis.bestMoveLan,
                 centipawnLoss = if (isPlayerMove) loss else null,
-                classification = if (isPlayerMove) {
-                    MoveClassifier.classify(evalBeforeStm, -evalAfterNextStm, playedBest)
-                } else {
-                    null
-                },
+                classification = classification,
                 themes = themes,
+                acceptableMoves = if (classification != null && classification in GRADED_DOWN) {
+                    acceptableAlternatives(step.fen)
+                } else {
+                    emptyList()
+                },
                 depth = step.analysis.depth
             )
         }
@@ -141,6 +155,32 @@ class GameAnalyzer(
         )
     }
 
+    /**
+     * MultiPV mining for a graded mistake's position: every alternative
+     * whose eval sits within the GOOD band of the top line is an
+     * acceptable drill answer. All evals come from the same search, same
+     * side-to-move perspective, so they compare directly. Single-line
+     * engines return no alternatives — an enhancement, not a requirement.
+     */
+    private fun acceptableAlternatives(fen: String): List<String> {
+        val board = Board().apply { loadFromFen(fen) }
+        val lines = engine.analyzeTop(board, ALTERNATIVES_MOVE_TIME_MS, ALTERNATIVES_MULTIPV)
+        if (lines.size < 2) return emptyList()
+        val bestCp = lines.first().effectiveCp()
+        return lines.drop(1)
+            .filter { alt ->
+                MoveClassifier.classify(
+                    evalBeforeCp = bestCp,
+                    evalAfterCp = alt.effectiveCp(),
+                    playedEngineBest = false
+                ) == MoveClassification.GOOD
+            }
+            .mapNotNull { it.bestMoveLan?.lowercase() }
+            // Re-validated against the real legal moves, same rule as
+            // every other engine-supplied move
+            .filter { lanToLegalMove(board, it) != null }
+    }
+
     companion object {
         /**
          * Bump when the analysis semantics change (thresholds, eval
@@ -148,8 +188,20 @@ class GameAnalyzer(
          * v2: theme tagging (Phase B).
          * v3: hybrid cp + win-probability-drop classification — stored
          * grades change, so history re-analyzes to match.
+         * v4: acceptable-alternative mining (MultiPV) for graded mistakes.
          */
-        const val VERSION = 3
+        const val VERSION = 4
+
+        /** Deeper than the per-ply sweep: only graded mistakes pay this. */
+        const val ALTERNATIVES_MOVE_TIME_MS = 400L
+        const val ALTERNATIVES_MULTIPV = 4
+
+        /** Classifications whose positions get alternative mining. */
+        private val GRADED_DOWN = setOf(
+            MoveClassification.INACCURACY,
+            MoveClassification.MISTAKE,
+            MoveClassification.BLUNDER
+        )
 
         /** Per-position budget: deep enough to grade honestly, ~15s for a 60-ply game. */
         const val DEFAULT_MOVE_TIME_MS = 250L

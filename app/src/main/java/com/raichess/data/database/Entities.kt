@@ -90,6 +90,14 @@ data class PositionEntity(
     val classification: String?,
     /** Comma-separated theme tags (hanging_piece, missed_fork, ...); filled by the tagging phase. */
     val themes: String = "",
+    /**
+     * Space-separated LAN moves that are ~as good as [bestMove] (MultiPV
+     * mining, analyzer v4+) — a drill accepts any of them, because an
+     * open position often has several fine moves and demanding the
+     * engine's exact pick reads as arbitrary. Empty for older rows and
+     * for AI moves.
+     */
+    val acceptableMoves: String = "",
     /** Search depth the verdict came from. */
     val analysisDepth: Int,
     /** Version of the analysis pipeline that wrote this row, for re-analysis. */
