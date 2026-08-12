@@ -79,6 +79,14 @@ object ChessColors {
     val EvalPositive = Color(0xFFCCCCCC) // Light gray for advantage
     val EvalNegative = Color(0xFF444444) // Dark gray for disadvantage
     val EvalNeutral = Color(0xFF888888)  // Mid gray for equal
+
+    // Coaching overlays — the ONE deliberate departure from the grayscale
+    // board. Three roles at three clearly separated luminance steps
+    // (amber bright, teal middle, crimson dark), so arrows and markers
+    // stay tellable-apart for colorblind players and in pure grayscale.
+    val CoachReveal = Color(0xFFFFC53D) // the coach's move: arrow + squares
+    val CoachReply = Color(0xFF2EC4B6)  // the opponent's scripted reply
+    val CoachWrong = Color(0xFFD7263D)  // the player's last wrong try
 }
 
 @Composable

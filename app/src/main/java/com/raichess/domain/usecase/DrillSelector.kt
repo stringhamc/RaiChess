@@ -52,7 +52,13 @@ object DrillSelector {
          * accepts any of them, since open positions often have several
          * fine moves. Empty for rows analyzed before v4.
          */
-        val acceptableLans: Set<String> = emptySet()
+        val acceptableLans: Set<String> = emptySet(),
+        /**
+         * The opponent's best reply to [playedLan] — the concrete tactic
+         * the mistake allowed, for coaching text. Null when the game ended
+         * on the mistake or the next ply wasn't analyzed.
+         */
+        val punishLan: String? = null
     )
 
     /** Puzzles this far from the player's ELO are filtered out. */

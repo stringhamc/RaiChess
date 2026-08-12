@@ -242,7 +242,8 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                 onSquareTapped = practiceViewModel::onSquareTapped,
                 onSourceChanged = practiceViewModel::setSource,
                 onNext = practiceViewModel::nextDrill,
-                onBack = { screen = Screen.Home }
+                onBack = { screen = Screen.Home },
+                onHint = practiceViewModel::onHint
             )
         }
 

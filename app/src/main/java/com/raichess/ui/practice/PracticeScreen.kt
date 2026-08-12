@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.raichess.domain.usecase.DrillSelector
+import com.raichess.ui.game.BoardArrow
 import com.raichess.ui.game.ChessBoard
 import com.raichess.ui.theme.ChessColors
 
@@ -37,7 +38,8 @@ fun PracticeScreen(
     onSquareTapped: (Int) -> Unit,
     onSourceChanged: (DrillSelector.Source) -> Unit,
     onNext: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHint: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -171,7 +173,8 @@ fun PracticeScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center,
-                        maxLines = 2
+                        // Coaching guidance runs longer than "Solved!"
+                        maxLines = 3
                     )
                 }
 
@@ -180,17 +183,30 @@ fun PracticeScreen(
                         .fillMaxWidth()
                         .aspectRatio(1f)
                 ) {
+                    // Coach overlays, luminance-separated: amber = the
+                    // coach's move, teal = the reply, crimson = wrong try
                     ChessBoard(
                         squares = state.squares,
                         selectedSquare = state.selectedSquare,
                         legalTargets = state.legalTargets,
-                        hintHighlights = state.revealHighlights,
                         lastMove = null,
                         lastMoveByOpponent = false,
                         checkedKingSquare = null,
                         hiddenSquare = null,
                         flipped = !state.playerIsWhite,
-                        onSquareTapped = onSquareTapped
+                        onSquareTapped = onSquareTapped,
+                        markers = buildMap {
+                            state.revealHighlights.forEach { put(it, ChessColors.CoachReveal) }
+                            state.wrongSquares.forEach { put(it, ChessColors.CoachWrong) }
+                        },
+                        arrows = listOfNotNull(
+                            state.replyArrow?.let {
+                                BoardArrow(it.first, it.second, ChessColors.CoachReply)
+                            },
+                            state.coachArrow?.let {
+                                BoardArrow(it.first, it.second, ChessColors.CoachReveal)
+                            }
+                        )
                     )
                 }
 
@@ -214,6 +230,11 @@ fun PracticeScreen(
         ) {
             OutlinedButton(onClick = onBack) { Text("Back") }
             if (!state.loading && !state.queueEmpty) {
+                if (state.phase == DrillPhase.SOLVING) {
+                    // One tap: guidance. Another: the arrow. Same ladder
+                    // wrong tries climb, without spending a miss.
+                    OutlinedButton(onClick = onHint) { Text("Hint") }
+                }
                 Button(onClick = onNext) {
                     Text(if (state.phase == DrillPhase.SOLVING) "Skip" else "Next")
                 }

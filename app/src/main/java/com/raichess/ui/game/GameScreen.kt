@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,6 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -354,6 +358,13 @@ private fun AnimatedChessBoard(
     }
 }
 
+/**
+ * A coaching arrow drawn over the board, square ordinal to square ordinal
+ * (a1=0..h8=63). Colors come from ChessColors' coach palette — three hues
+ * at three luminance steps, so overlapping roles stay distinguishable.
+ */
+data class BoardArrow(val from: Int, val to: Int, val color: Color)
+
 @Composable
 fun ChessBoard(
     squares: List<Char?>,
@@ -365,43 +376,109 @@ fun ChessBoard(
     checkedKingSquare: Int?,
     hiddenSquare: Int?,
     flipped: Boolean,
-    onSquareTapped: (Int) -> Unit
+    onSquareTapped: (Int) -> Unit,
+    /** Colored square markers (border + tint) keyed by square ordinal. */
+    markers: Map<Int, Color> = emptyMap(),
+    /** Coaching arrows, drawn in list order (last on top). */
+    arrows: List<BoardArrow> = emptyList()
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .border(2.dp, ChessColors.SquareBorder)
-            .padding(2.dp)
-    ) {
-        // Rank 8 at the top for white, rank 1 at the top when flipped
-        val ranks = if (flipped) 0..7 else 7 downTo 0
-        for (rank in ranks) {
-            Row(modifier = Modifier.weight(1f)) {
-                val files = if (flipped) 7 downTo 0 else 0..7
-                for (file in files) {
-                    val index = rank * 8 + file
-                    val isBottomRow = rank == if (flipped) 7 else 0
-                    val isLeftColumn = file == if (flipped) 7 else 0
-                    val onLastMove = lastMove?.let { index == it.from || index == it.to } ?: false
-                    BoardSquare(
-                        piece = if (index == hiddenSquare) null else squares.getOrNull(index),
-                        isLight = (rank + file) % 2 == 1,
-                        isSelected = index == selectedSquare,
-                        isLegalTarget = index in legalTargets,
-                        isCaptureTarget = index in legalTargets && squares.getOrNull(index) != null,
-                        isLastMove = onLastMove,
-                        isOpponentLastMove = onLastMove && lastMoveByOpponent,
-                        isHintHighlight = index in hintHighlights,
-                        isCheckedKing = index == checkedKingSquare,
-                        fileLabel = if (isBottomRow) ('a' + file) else null,
-                        rankLabel = if (isLeftColumn) ('1' + rank) else null,
-                        onTap = { onSquareTapped(index) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize()
-                    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .border(2.dp, ChessColors.SquareBorder)
+                .padding(2.dp)
+        ) {
+            // Rank 8 at the top for white, rank 1 at the top when flipped
+            val ranks = if (flipped) 0..7 else 7 downTo 0
+            for (rank in ranks) {
+                Row(modifier = Modifier.weight(1f)) {
+                    val files = if (flipped) 7 downTo 0 else 0..7
+                    for (file in files) {
+                        val index = rank * 8 + file
+                        val isBottomRow = rank == if (flipped) 7 else 0
+                        val isLeftColumn = file == if (flipped) 7 else 0
+                        val onLastMove =
+                            lastMove?.let { index == it.from || index == it.to } ?: false
+                        BoardSquare(
+                            piece = if (index == hiddenSquare) null else squares.getOrNull(index),
+                            isLight = (rank + file) % 2 == 1,
+                            isSelected = index == selectedSquare,
+                            isLegalTarget = index in legalTargets,
+                            isCaptureTarget =
+                                index in legalTargets && squares.getOrNull(index) != null,
+                            isLastMove = onLastMove,
+                            isOpponentLastMove = onLastMove && lastMoveByOpponent,
+                            isHintHighlight = index in hintHighlights,
+                            isCheckedKing = index == checkedKingSquare,
+                            markerColor = markers[index],
+                            fileLabel = if (isBottomRow) ('a' + file) else null,
+                            rankLabel = if (isLeftColumn) ('1' + rank) else null,
+                            onTap = { onSquareTapped(index) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                        )
+                    }
                 }
             }
+        }
+        if (arrows.isNotEmpty()) {
+            // Same 2dp inset as the grid (the border band), so arrow
+            // geometry lines up with square centers. Canvas has no click
+            // handling, so taps fall through to the squares beneath.
+            BoardArrowOverlay(
+                arrows = arrows,
+                flipped = flipped,
+                modifier = Modifier.matchParentSize().padding(2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoardArrowOverlay(
+    arrows: List<BoardArrow>,
+    flipped: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val cell = size.width / 8f
+        fun center(square: Int): Offset {
+            val file = square % 8
+            val rank = square / 8
+            val col = if (flipped) 7 - file else file
+            val row = if (flipped) rank else 7 - rank
+            return Offset((col + 0.5f) * cell, (row + 0.5f) * cell)
+        }
+        arrows.forEach { arrow ->
+            val from = center(arrow.from)
+            val to = center(arrow.to)
+            val delta = to - from
+            val length = delta.getDistance()
+            if (length <= 0f) return@forEach
+            val unit = delta / length
+            // Start off-center so the arrow reads as leaving the piece;
+            // the head lands on the target square's center
+            val start = from + unit * (cell * 0.30f)
+            val headLength = cell * 0.38f
+            val base = to - unit * headLength
+            val color = arrow.color.copy(alpha = 0.85f)
+            drawLine(
+                color = color,
+                start = start,
+                end = base,
+                strokeWidth = cell * 0.22f,
+                cap = StrokeCap.Round
+            )
+            val perp = Offset(-unit.y, unit.x) * (headLength * 0.62f)
+            val head = Path().apply {
+                moveTo(to.x, to.y)
+                lineTo(base.x + perp.x, base.y + perp.y)
+                lineTo(base.x - perp.x, base.y - perp.y)
+                close()
+            }
+            drawPath(head, color)
         }
     }
 }
@@ -417,6 +494,7 @@ private fun BoardSquare(
     isOpponentLastMove: Boolean,
     isHintHighlight: Boolean,
     isCheckedKing: Boolean,
+    markerColor: Color? = null,
     fileLabel: Char?,
     rankLabel: Char?,
     onTap: () -> Unit,
@@ -462,10 +540,19 @@ private fun BoardSquare(
             )
         }
         if (isHintHighlight) {
+            // Coach amber, not grayscale: hints are the coach pointing
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .border(2.5.dp, ChessColors.LegalMoveIndicator)
+                    .border(2.5.dp, ChessColors.CoachReveal)
+            )
+        }
+        if (markerColor != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(markerColor.copy(alpha = 0.25f))
+                    .border(2.5.dp, markerColor)
             )
         }
         rankLabel?.let {
