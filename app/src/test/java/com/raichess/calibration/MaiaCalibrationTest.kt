@@ -3,6 +3,7 @@ package com.raichess.calibration
 import com.github.bhlangonijr.chesslib.Board
 import com.github.bhlangonijr.chesslib.Side
 import com.github.bhlangonijr.chesslib.move.MoveGenerator
+import com.raichess.data.engine.EngineFactory
 import com.raichess.data.engine.RaiEngine
 import java.io.File
 import org.junit.Assume.assumeTrue
@@ -125,6 +126,98 @@ class MaiaCalibrationTest {
         report.appendLine("Anchors floor at Stockfish's UCI_Elo minimum (1320).")
         println(report)
         assert(totalGames > 0) { "no games played — are the weights present?" }
+    }
+
+    /**
+     * Measures the RaiEngine → Maia seam: the app serves 950-1099 as
+     * maia-1100 with a lapse rate ramping to zero (the "eased" band, see
+     * EngineFactory.maiaSoftBlunderFor). Two questions per setting: how
+     * strong is it against a fixed anchor, and does it sit ABOVE the top
+     * of the compressed RaiEngine dial — i.e. is the seam monotonic?
+     */
+    @Test
+    fun `measure the eased seam below maia's floor`() {
+        assumeTrue(
+            "maia calibration is opt-in: run with -Draichess.calibrate.maia=true",
+            System.getProperty("raichess.calibrate.maia") == "true"
+        )
+        val lc0Path = System.getProperty("lc0.path") ?: "lc0"
+        val weightsDir = File(System.getProperty("maia.weights.dir") ?: ".")
+        val stockfishPath = System.getProperty("stockfish.path") ?: "stockfish"
+        val gamesPerPairing =
+            (System.getProperty("raichess.calibrate.games") ?: "$DEFAULT_GAMES").toInt()
+        val weights = File(weightsDir, "maia-1100.pb.gz")
+        assumeTrue("maia-1100 weights present", weights.isFile)
+
+        val report = StringBuilder()
+        report.appendLine("Eased-seam calibration (maia-1100 + lapse rate)")
+        report.appendLine("setting     | opponent        | games | score")
+        report.appendLine("------------+-----------------+-------+------")
+
+        UciProcessClient(listOf(lc0Path, "--weights=${weights.absolutePath}")).use { maia ->
+            maia.start()
+            for (elo in intArrayOf(950, 1050)) {
+                val eps = EngineFactory.maiaSoftBlunderFor(elo)
+                // The same lapse roll the app applies (MaiaEngine)
+                fun easedMove(fen: String, rnd: Random): String? {
+                    if (rnd.nextDouble() < eps) {
+                        val board = Board().apply { loadFromFen(fen) }
+                        val legal = MoveGenerator.generateLegalMoves(board)
+                        if (legal.isNotEmpty()) {
+                            return legal[rnd.nextInt(legal.size)].toString().lowercase()
+                        }
+                    }
+                    return maia.bestMoveNodes(fen, 1)
+                }
+
+                // vs the top of the compressed RaiEngine dial: monotonic
+                // seam means this stays above 0.5
+                var raiScore = 0.0
+                repeat(gamesPerPairing) { game ->
+                    val rnd = Random(elo * 31 + game)
+                    val rai = RaiEngine(targetElo = 900, random = Random(elo * 977 + game))
+                    raiScore += playGame(
+                        white = { fen ->
+                            if (game % 2 == 0) easedMove(fen, rnd) else raiMove(rai, fen)
+                        },
+                        black = { fen ->
+                            if (game % 2 == 0) raiMove(rai, fen) else easedMove(fen, rnd)
+                        },
+                        scoredSideIsWhite = game % 2 == 0
+                    )
+                }
+                report.appendLine(
+                    "eased %4d | RaiEngine   900 | %5d | %.3f".format(
+                        elo, gamesPerPairing, raiScore / gamesPerPairing
+                    )
+                )
+
+                UciProcessClient(stockfishPath).use { stockfish ->
+                    stockfish.startLimitedTo(1320)
+                    var sfScore = 0.0
+                    repeat(gamesPerPairing) { game ->
+                        val rnd = Random(elo * 53 + game)
+                        sfScore += playGame(
+                            white = { fen ->
+                                if (game % 2 == 0) easedMove(fen, rnd)
+                                else stockfish.bestMove(fen, SF_MOVE_TIME_MS)
+                            },
+                            black = { fen ->
+                                if (game % 2 == 0) stockfish.bestMove(fen, SF_MOVE_TIME_MS)
+                                else easedMove(fen, rnd)
+                            },
+                            scoredSideIsWhite = game % 2 == 0
+                        )
+                    }
+                    report.appendLine(
+                        "eased %4d | Stockfish  1320 | %5d | %.3f".format(
+                            elo, gamesPerPairing, sfScore / gamesPerPairing
+                        )
+                    )
+                }
+            }
+        }
+        println(report)
     }
 
     /** RaiEngine as a UCI-shaped move provider over a FEN. */

@@ -59,24 +59,37 @@ class GameRepository(context: Context) {
 
     /**
      * The player's drillable analyzed mistakes (stored best move = answer
-     * key), newest games first, mapped for the practice queue. Shallow
-     * fallback analyses (RaiEngine, depth 3) are excluded — their "best"
-     * moves aren't trustworthy enough to demand the player reproduce
-     * them; those games regain their drills once re-analyzed by a real
-     * engine (the analyzer-version requeue does this automatically).
+     * key), newest games first, mapped for the practice queue. Two
+     * quality gates keep drills puzzle-like:
+     * - Shallow fallback analyses (RaiEngine, depth 3) are excluded —
+     *   their "best" moves aren't trustworthy answer keys. Those games
+     *   regain drills once the version requeue re-analyzes them.
+     * - Open-ended positions are excluded: a drill needs either a
+     *   substantive tagged pattern (hanging piece, missed mate, ...) or
+     *   a blunder-sized loss. A moderate positional drift in the opening
+     *   has several fine moves and no single lesson — it still feeds the
+     *   weakness profile and the review, just not a find-the-move drill.
      */
     suspend fun mistakeDrills(limit: Int = 100): List<DrillSelector.MistakeDrill> =
         dao.mistakeDrillRows(
             MoveClassifier.MISTAKE_THRESHOLD_CP,
             GameAnalyzer.MIN_TRUSTED_DEPTH,
             limit
-        ).map { row ->
+        ).filter { row ->
+            val themes = ThemeTag.fromCsv(row.themes)
+            themes.any { !it.isPhase } ||
+                row.centipawnLoss >= MoveClassifier.BLUNDER_THRESHOLD_CP
+        }.map { row ->
             DrillSelector.MistakeDrill(
                 id = "mistake:${row.gameId}:${row.ply}",
                 fen = row.fen,
                 bestMoveLan = row.bestMove,
                 playedLan = row.movePlayed,
-                themes = ThemeTag.fromCsv(row.themes)
+                themes = ThemeTag.fromCsv(row.themes),
+                acceptableLans = row.acceptableMoves
+                    .split(' ')
+                    .filter { it.isNotBlank() }
+                    .toSet()
             )
         }
 
@@ -93,6 +106,7 @@ class GameRepository(context: Context) {
                 centipawnLoss = move.centipawnLoss,
                 classification = move.classification?.name,
                 themes = ThemeTag.toCsv(move.themes),
+                acceptableMoves = move.acceptableMoves.joinToString(" "),
                 analysisDepth = move.depth,
                 analyzerVersion = GameAnalyzer.VERSION
             )

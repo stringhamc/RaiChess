@@ -81,10 +81,11 @@ class RaiEngineTest {
 
     @Test
     fun `weakest settings blunder more than mid settings`() {
-        // The 400-600 beginner band is near-random by design
-        assertTrue(RaiEngine(450).blunderChance > RaiEngine(900).blunderChance)
+        // The bottom of the (post-Maia, compressed) dial is near-random
+        // by design
+        assertTrue(RaiEngine(420).blunderChance > RaiEngine(900).blunderChance)
         assertTrue(RaiEngine(650).blunderChance > RaiEngine(900).blunderChance)
-        assertTrue(RaiEngine(450).blunderChance >= 0.5)
+        assertTrue(RaiEngine(420).blunderChance >= 0.5)
     }
 
     @org.junit.Test
@@ -98,21 +99,21 @@ class RaiEngineTest {
 
     @Test
     fun `weak engine deviates from the best move on some seeds`() {
-        // Hanging queen: the objectively best move is c4xd5. An 800-ELO
-        // engine blunders 30% of the time, so across many seeds it must
+        // Hanging queen: the objectively best move is c4xd5. A 600-ELO
+        // engine blunders 22% of the time, so across many seeds it must
         // sometimes play something else.
         var deviated = false
         for (seed in 0..40) {
             val board = Board()
             board.loadFromFen("rnb1kbnr/ppp1pppp/8/3q4/2P5/8/PP1PPPPP/RNBQKBNR w KQkq - 0 3")
-            val engine = RaiEngine(targetElo = 800, random = Random(seed))
+            val engine = RaiEngine(targetElo = 600, random = Random(seed))
             val move = checkNotNull(engine.selectMove(board))
             if (move.toString() != "c4d5") {
                 deviated = true
                 break
             }
         }
-        assertTrue("an 800-ELO engine should not always find the best move", deviated)
+        assertTrue("a 600-ELO engine should not always find the best move", deviated)
     }
 
     @Test
@@ -122,7 +123,7 @@ class RaiEngineTest {
         val chosen = mutableSetOf<String>()
         for (seed in 0..20) {
             val board = Board()
-            val engine = RaiEngine(targetElo = 900, random = Random(seed))
+            val engine = RaiEngine(targetElo = 600, random = Random(seed))
             chosen.add(checkNotNull(engine.selectMove(board)).toString())
         }
         assertTrue(

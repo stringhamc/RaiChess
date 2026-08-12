@@ -46,6 +46,17 @@ interface ChessEngine {
     fun analyze(board: Board, moveTimeMs: Long): PositionAnalysis? = null
 
     /**
+     * Like [analyze] but returning the top [multiPv] continuations, best
+     * first. Powers "several moves are fine here" judgments (drill
+     * alternatives): each entry's eval is from the same search, same
+     * side-to-move perspective, so entries are directly comparable.
+     * Default: the single best line — implementations without MultiPV
+     * support (RaiEngine, Maia) degrade to that gracefully.
+     */
+    fun analyzeTop(board: Board, moveTimeMs: Long, multiPv: Int): List<PositionAnalysis> =
+        listOfNotNull(analyze(board, moveTimeMs))
+
+    /**
      * Short human-readable label for the engine currently producing moves,
      * for a UI indicator. May change across [selectMove] calls if a stronger
      * engine degrades to a weaker one — e.g. [StockfishWasmEngine] reports

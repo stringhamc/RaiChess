@@ -21,6 +21,9 @@ data class MistakeDrillRow(
     val fen: String,
     val bestMove: String,
     val movePlayed: String,
+    val centipawnLoss: Int,
+    /** Space-separated LAN alternates accepted alongside [bestMove]. */
+    val acceptableMoves: String,
     val themes: String
 )
 
@@ -64,7 +67,9 @@ interface GameDao {
      */
     @Query(
         "SELECT p.gameId AS gameId, p.ply AS ply, p.fen AS fen, " +
-            "p.bestMove AS bestMove, p.movePlayed AS movePlayed, p.themes AS themes " +
+            "p.bestMove AS bestMove, p.movePlayed AS movePlayed, " +
+            "p.centipawnLoss AS centipawnLoss, " +
+            "p.acceptableMoves AS acceptableMoves, p.themes AS themes " +
             "FROM positions p JOIN games g ON p.gameId = g.id " +
             "WHERE p.isPlayerMove = 1 AND p.centipawnLoss >= :minLossCp " +
             "AND p.bestMove IS NOT NULL AND p.analysisDepth >= :minDepth " +

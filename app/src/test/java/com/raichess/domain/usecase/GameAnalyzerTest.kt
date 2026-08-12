@@ -17,7 +17,7 @@ import org.junit.Test
 class GameAnalyzerTest {
 
     /** Returns the queued analyses in order; fails the test if over-consumed. */
-    private class ScriptedEngine(analyses: List<PositionAnalysis?>) : ChessEngine {
+    private open class ScriptedEngine(analyses: List<PositionAnalysis?>) : ChessEngine {
         private val queue = analyses.toMutableList()
         var calls = 0
             private set
@@ -29,6 +29,14 @@ class GameAnalyzerTest {
             check(queue.isNotEmpty()) { "engine asked for more analyses than scripted" }
             return queue.removeAt(0)
         }
+
+        // No MultiPV by default: the alternative-mining pass must consume
+        // nothing from the per-ply script (mirrors single-line engines)
+        override fun analyzeTop(
+            board: Board,
+            moveTimeMs: Long,
+            multiPv: Int
+        ): List<PositionAnalysis> = emptyList()
     }
 
     private fun cp(score: Int, best: String) =
@@ -103,6 +111,40 @@ class GameAnalyzerTest {
         assertEquals(-1000, qh4.evaluationCp)
 
         assertEquals((70 + 920) / 2.0, report.acpl, 1e-9)
+    }
+
+    @Test
+    fun `graded mistakes store near-best alternatives, filtered to the GOOD band`() {
+        // Same fool's-mate script as above; the engine additionally offers
+        // MultiPV lines for the graded g4?? position (after 1.f3 e5):
+        // e2e4 sits within the GOOD band of the top line (15cp), h2h4
+        // does not (220cp / ~18 win-percent points) and must be rejected
+        val engine = object : ScriptedEngine(
+            listOf(
+                cp(20, "e2e4"),
+                cp(50, "e7e5"),
+                cp(-80, "d2d4"),
+                PositionAnalysis(scoreCp = null, mateIn = 1, bestMoveLan = "d8h4", depth = 15)
+            )
+        ) {
+            override fun analyzeTop(
+                board: Board,
+                moveTimeMs: Long,
+                multiPv: Int
+            ): List<PositionAnalysis> = listOf(
+                cp(-80, "d2d4"),
+                cp(-95, "e2e4"),
+                cp(-300, "h2h4")
+            )
+        }
+        val report = GameAnalyzer(engine)
+            .analyze(listOf("f2f3", "e7e5", "g2g4", "d8h4"), playerIsWhite = true)!!
+
+        val g4 = report.moves[2]
+        assertEquals(listOf("e2e4"), g4.acceptableMoves)
+        // Ungraded moves never mine alternatives
+        assertTrue(report.moves[0].acceptableMoves.isEmpty())
+        assertTrue(report.moves[1].acceptableMoves.isEmpty())
     }
 
     @Test

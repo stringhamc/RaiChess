@@ -260,7 +260,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 playerIsWhite = running.solverSide == Side.WHITE,
                 phase = DrillPhase.SOLVING,
                 prompt = promptFor(running.solverSide),
-                sourceLabel = "Puzzle · ${puzzle.rating}",
+                sourceLabel = if (puzzle.playerMoveCount >= 2) {
+                    "Puzzle · ${puzzle.rating} · ${puzzle.playerMoveCount}-move line"
+                } else {
+                    "Puzzle · ${puzzle.rating}"
+                },
                 selectedSquare = null,
                 legalTargets = emptySet(),
                 revealHighlights = emptySet()
@@ -368,15 +372,27 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     private fun handleMistakeMove(mistake: DrillSelector.MistakeDrill, move: Move) {
         val played = move.toString().lowercase()
-        if (played == mistake.bestMoveLan.lowercase()) {
-            board.doMove(move)
-            finishDrill(solved = true, revealLan = null)
-        } else {
-            finishDrill(solved = false, revealLan = mistake.bestMoveLan)
+        when {
+            played == mistake.bestMoveLan.lowercase() -> {
+                board.doMove(move)
+                finishDrill(solved = true, revealLan = null)
+            }
+            // Open positions often have several fine moves; any stored
+            // near-best alternative solves the drill (analyzer v4 mining)
+            played in mistake.acceptableLans -> {
+                board.doMove(move)
+                finishDrill(
+                    solved = true,
+                    revealLan = null,
+                    solvedNote = "Solved! The engine liked " +
+                        "${LanFormat.arrow(mistake.bestMoveLan)} — yours is just as good."
+                )
+            }
+            else -> finishDrill(solved = false, revealLan = mistake.bestMoveLan)
         }
     }
 
-    private fun finishDrill(solved: Boolean, revealLan: String?) {
+    private fun finishDrill(solved: Boolean, revealLan: String?, solvedNote: String? = null) {
         val state = _uiState.value
         val drillId = activePuzzle?.let { "puzzle:${it.puzzle.id}" }
             ?: activeMistake?.id ?: return
@@ -435,6 +451,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             phase = if (solved) DrillPhase.SOLVED else DrillPhase.FAILED,
             prompt = when {
                 lessonDoneTitle != null -> "Tap Next for your next lesson."
+                solved && solvedNote != null -> solvedNote
                 solved -> if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
                 else -> failPrompt(revealLan)
             },
