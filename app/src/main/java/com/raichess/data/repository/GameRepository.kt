@@ -89,7 +89,8 @@ class GameRepository(context: Context) {
                 acceptableLans = row.acceptableMoves
                     .split(' ')
                     .filter { it.isNotBlank() }
-                    .toSet()
+                    .toSet(),
+                punishLan = row.punishment?.lowercase()
             )
         }
 

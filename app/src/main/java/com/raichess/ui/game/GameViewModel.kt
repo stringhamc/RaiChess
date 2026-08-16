@@ -195,6 +195,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Persists the colorized-board choice. The live palette switch is
+     * ChessColors.colorized (Compose state) — MainActivity flips both, so
+     * this ViewModel stays Compose-free.
+     */
+    fun setBoardColorized(enabled: Boolean) {
+        settingsRepository.boardColorized = enabled
+    }
+
+    fun boardColorized(): Boolean = settingsRepository.boardColorized
+
+    /**
      * One-tap play (home tile, coach action, play-again): White while the
      * player is still finding their feet, a random side once they've
      * graduated calibration — real chess is played from both colors, and

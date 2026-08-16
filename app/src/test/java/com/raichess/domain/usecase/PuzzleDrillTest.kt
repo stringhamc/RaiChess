@@ -48,14 +48,17 @@ class PuzzleDrillTest {
     }
 
     @Test
-    fun `wrong move reveals the expected one and leaves the position`() {
+    fun `wrong move reveals the expected one and leaves the drill retryable`() {
         val drill = PuzzleDrill(mateInTwo)
         val fenBefore = drill.currentFen
         val outcome = drill.submit("b1b8")
         assertTrue(outcome is PuzzleDrill.Outcome.Wrong)
         assertEquals("a1a8", (outcome as PuzzleDrill.Outcome.Wrong).expectedLan)
         assertEquals(fenBefore, drill.currentFen)
-        assertTrue(drill.isFinished)
+        // The coaching ladder invites another try — the drill stays open,
+        // and the right move still walks the line forward
+        assertTrue(!drill.isFinished)
+        assertTrue(drill.submit("a1a8") is PuzzleDrill.Outcome.Continue)
     }
 
     @Test

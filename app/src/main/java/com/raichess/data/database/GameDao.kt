@@ -24,6 +24,12 @@ data class MistakeDrillRow(
     val centipawnLoss: Int,
     /** Space-separated LAN alternates accepted alongside [bestMove]. */
     val acceptableMoves: String,
+    /**
+     * The opponent's best reply to the move actually played — the concrete
+     * tactic the mistake allowed. Joined from the next ply's analysis row,
+     * so it needs no extra storage; null for a game-ending move.
+     */
+    val punishment: String?,
     val themes: String
 )
 
@@ -69,8 +75,11 @@ interface GameDao {
         "SELECT p.gameId AS gameId, p.ply AS ply, p.fen AS fen, " +
             "p.bestMove AS bestMove, p.movePlayed AS movePlayed, " +
             "p.centipawnLoss AS centipawnLoss, " +
-            "p.acceptableMoves AS acceptableMoves, p.themes AS themes " +
+            "p.acceptableMoves AS acceptableMoves, " +
+            "nxt.bestMove AS punishment, p.themes AS themes " +
             "FROM positions p JOIN games g ON p.gameId = g.id " +
+            "LEFT JOIN positions nxt " +
+            "ON nxt.gameId = p.gameId AND nxt.ply = p.ply + 1 " +
             "WHERE p.isPlayerMove = 1 AND p.centipawnLoss >= :minLossCp " +
             "AND p.bestMove IS NOT NULL AND p.analysisDepth >= :minDepth " +
             "ORDER BY g.datePlayed DESC, p.ply ASC LIMIT :limit"

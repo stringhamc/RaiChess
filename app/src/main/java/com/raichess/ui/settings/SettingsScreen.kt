@@ -48,6 +48,8 @@ fun SettingsScreen(
     stats: EloStats?,
     animationsEnabled: Boolean,
     onAnimationsChanged: (Boolean) -> Unit,
+    boardColorized: Boolean,
+    onBoardColorizedChanged: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     RaiScreen(title = "Settings", onBack = onBack) {
@@ -75,31 +77,23 @@ fun SettingsScreen(
         }
 
         // Animation toggle
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                SectionLabel(text = "Move animation")
-                Text(
-                    text = "150 ms slide · on by default",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-            Switch(
-                checked = animationsEnabled,
-                onCheckedChange = onAnimationsChanged,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = ChessColors.ControlActive,
-                    checkedTrackColor = ChessColors.ControlTrackActive,
-                    uncheckedThumbColor = ChessColors.ControlThumbInactive,
-                    uncheckedTrackColor = ChessColors.ControlTrackInactive
-                )
-            )
-        }
+        SettingSwitchRow(
+            title = "Move animation",
+            subtitle = "150 ms slide · on by default",
+            checked = animationsEnabled,
+            onCheckedChange = onAnimationsChanged
+        )
+
+        Spacer(modifier = Modifier.height(26.dp))
+
+        // Colorized board toggle — both palettes keep the same luminance
+        // ladder, so turning color off never loses information
+        SettingSwitchRow(
+            title = "Colorized board",
+            subtitle = "Colorblind-safe hues, distinct brightness · off = pure grayscale",
+            checked = boardColorized,
+            onCheckedChange = onBoardColorizedChanged
+        )
 
         Spacer(modifier = Modifier.height(26.dp))
 
@@ -111,6 +105,41 @@ fun SettingsScreen(
             style = MaterialTheme.typography.labelSmall,
             letterSpacing = 1.sp,
             color = MaterialTheme.colorScheme.secondary
+        )
+    }
+}
+
+/** One labeled preference switch, grayscale chrome as everywhere else. */
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            SectionLabel(text = title)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = ChessColors.ControlActive,
+                checkedTrackColor = ChessColors.ControlTrackActive,
+                uncheckedThumbColor = ChessColors.ControlThumbInactive,
+                uncheckedTrackColor = ChessColors.ControlTrackInactive
+            )
         )
     }
 }

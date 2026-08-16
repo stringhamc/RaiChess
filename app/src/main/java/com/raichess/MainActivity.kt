@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.raichess.data.analysis.AnalysisCoordinator
+import com.raichess.data.repository.SettingsRepository
 import com.raichess.domain.usecase.CoachAdvisor
 import com.raichess.domain.usecase.DrillSelector
 import com.raichess.ui.coach.CoachScreen
@@ -43,6 +44,7 @@ import com.raichess.ui.practice.PracticeViewModel
 import com.raichess.ui.review.ReviewScreen
 import com.raichess.ui.review.ReviewViewModel
 import com.raichess.ui.settings.SettingsScreen
+import com.raichess.ui.theme.ChessColors
 import com.raichess.ui.theme.RaiChessTheme
 
 /**
@@ -55,6 +57,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Restore the palette choice before the first frame renders
+        ChessColors.colorized = SettingsRepository(this).boardColorized
         // Finish any post-game analysis a previous process didn't complete
         // (fire-and-forget; no-op when nothing is pending)
         AnalysisCoordinator.analyzePendingGames(applicationContext)
@@ -242,7 +246,8 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                 onSquareTapped = practiceViewModel::onSquareTapped,
                 onSourceChanged = practiceViewModel::setSource,
                 onNext = practiceViewModel::nextDrill,
-                onBack = { screen = Screen.Home }
+                onBack = { screen = Screen.Home },
+                onHint = practiceViewModel::onHint
             )
         }
 
@@ -305,6 +310,13 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
             stats = state.playerStats,
             animationsEnabled = state.animationsEnabled,
             onAnimationsChanged = viewModel::setAnimationsEnabled,
+            // ChessColors.colorized is Compose state, so the switch and
+            // every visible board recompose together on toggle
+            boardColorized = ChessColors.colorized,
+            onBoardColorizedChanged = { enabled ->
+                viewModel.setBoardColorized(enabled)
+                ChessColors.colorized = enabled
+            },
             onBack = { screen = Screen.Home }
         )
     }

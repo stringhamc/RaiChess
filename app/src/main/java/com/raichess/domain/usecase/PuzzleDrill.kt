@@ -22,7 +22,7 @@ class PuzzleDrill(val puzzle: Puzzle) {
         /** Right move and the line is finished. */
         object Solved : Outcome()
 
-        /** Wrong move (not applied); the expected move for reveal. */
+        /** Wrong move (not applied, drill still open); the expected move. */
         data class Wrong(val expectedLan: String) : Outcome()
     }
 
@@ -70,7 +70,8 @@ class PuzzleDrill(val puzzle: Puzzle) {
     /**
      * Submit the player's move in LAN. Correct moves are applied (with the
      * opponent's scripted reply, when the line continues); wrong moves
-     * leave the position untouched so the player sees the reveal in place.
+     * leave the position untouched — and the drill open, so the coaching
+     * ladder can invite another try instead of ending the drill.
      *
      * A corrupt continuation (a scripted move that isn't legal in the
      * position) ends the drill as Solved: everything the player did was
@@ -80,7 +81,6 @@ class PuzzleDrill(val puzzle: Puzzle) {
         check(!isFinished) { "drill already finished" }
         val expected = puzzle.moves[nextIndex]
         if (moveLan.lowercase() != expected) {
-            isFinished = true
             return Outcome.Wrong(expected)
         }
         if (!applyLan(expected)) return Outcome.Solved
