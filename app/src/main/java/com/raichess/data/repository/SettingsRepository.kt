@@ -22,6 +22,17 @@ class SettingsRepository(context: Context) {
         }
 
     /**
+     * Colorized board & coaching palette (on by default); off restores
+     * the original pure-grayscale board. Both palettes keep the same
+     * luminance ladder — see Palette.
+     */
+    var boardColorized: Boolean
+        get() = prefs.getBoolean(KEY_BOARD_COLORIZED, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_BOARD_COLORIZED, value).apply()
+        }
+
+    /**
      * Remembers the player's last-selected game mode across launches.
      * First-run default is TRAINING: with instant-play from the home tile,
      * a brand-new player's first game should land in the assisted,
@@ -39,6 +50,7 @@ class SettingsRepository(context: Context) {
     companion object {
         private const val PREFS_NAME = "raichess_settings"
         private const val KEY_ANIMATIONS = "animations_enabled"
+        private const val KEY_BOARD_COLORIZED = "board_colorized"
         private const val KEY_GAME_MODE = "game_mode"
     }
 }
