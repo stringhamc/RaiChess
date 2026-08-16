@@ -5,6 +5,7 @@ import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.TrainingStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -80,6 +81,17 @@ class CoachAdvisorTest {
         val advice = CoachAdvisor.advise(stats(15), WeaknessProfile.EMPTY, defaultPlan, allSolved)
         assertEquals(CoachAdvisor.Action.PLAY_GAME, advice.action)
         assertTrue(advice.focuses.any { it.contains("plan is complete") })
+    }
+
+    @Test
+    fun `weakness severity is spoken in words, not pawn counts`() {
+        val blundery = WeaknessProfile(
+            weaknesses = listOf(themeStat(ThemeTag.HANGING_PIECE, avgLossCp = 350.0)),
+            phases = emptyList()
+        )
+        val advice = CoachAdvisor.advise(stats(15), blundery, defaultPlan, emptyMap())
+        assertTrue(advice.detail, advice.detail.contains("swinging whole games"))
+        assertFalse(advice.detail, advice.detail.contains("pawns"))
     }
 
     @Test

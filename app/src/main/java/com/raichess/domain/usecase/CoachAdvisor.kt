@@ -3,9 +3,9 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.TrainingStatus
-import kotlin.math.roundToInt
 
 /**
  * The coach's voice: turns the player's data (rating, weakness profile,
@@ -149,11 +149,14 @@ object CoachAdvisor {
     private fun weaknessTalk(stat: ThemeStat): Pair<String, String> {
         val talk = WEAKNESS_TALK[stat.theme]
             ?: ("Let's train a pattern I keep seeing." to "One mistake type keeps recurring")
-        val pawns = (stat.avgLossCp / 100).roundToInt()
-        val cost = if (pawns >= 1) {
-            " — costing about $pawns ${if (pawns == 1) "pawn" else "pawns"} of position each time"
-        } else {
-            ""
+        // Severity in words, not centipawns — the count is an observation
+        // the player can verify, "3.2 pawns" is engine bookkeeping
+        val cost = when {
+            stat.avgLossCp >= MoveClassifier.BLUNDER_THRESHOLD_CP ->
+                " — and it's been swinging whole games"
+            stat.avgLossCp >= MoveClassifier.MISTAKE_THRESHOLD_CP ->
+                " — giving back real ground each time"
+            else -> ""
         }
         val times = if (stat.occurrences == 1) "once" else "${stat.occurrences}×"
         return talk.first to

@@ -26,18 +26,17 @@ import com.raichess.domain.model.EloConfiguration
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameMode
 import com.raichess.domain.model.GameResult
-import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.MoveClassification
 import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.PgnBuilder
 import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.model.PositionAnalysis
-import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.UndoPenalty
 import com.raichess.domain.model.WinProbability
 import com.raichess.domain.model.canUndo
 import com.raichess.domain.usecase.CoachAdvisor
 import com.raichess.domain.usecase.HintAdvisor
+import com.raichess.domain.usecase.MistakeNarrator
 import com.raichess.domain.usecase.ThemeTagger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -769,10 +768,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * "Why?" text for a graded inaccuracy-or-worse: the tagged reason
-     * when a detector recognizes the mistake (live ThemeTagger pass —
-     * board geometry only, no extra engine call), else the eval cost,
-     * plus the engine's preferred move. Null for fine moves.
+     * "Why?" text for a graded inaccuracy-or-worse, phrased as the chess
+     * behind the grade — the tactic allowed, the piece hung, the standing
+     * lost — never the centipawn bill (field request: "It cost about 3.2
+     * pawns" named the size of the mistake but taught nothing about it).
+     * Themes come from a live ThemeTagger pass (board geometry only, no
+     * extra engine call); the opponent's punishing reply is [afterMove]'s
+     * own best move. Null for fine moves.
      */
     private fun buildMoveWhy(
         fenBefore: String?,
@@ -788,16 +790,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             rating == MoveClassification.MISTAKE ||
             rating == MoveClassification.BLUNDER
         if (!graded) return null
-        val themed = ThemeTag.explain(
-            ThemeTagger.tag(fenBefore, ply, moveLan, baseline, afterMove, lossCp)
-        )?.let { "Your move $it." }
-        // Integer tenths keep the decimal locale-proof
-        val tenths = lossCp / 10
-        val cost = "It cost about ${tenths / 10}.${tenths % 10} pawns."
-        val best = baseline.bestMoveLan
-            ?.takeIf { it != moveLan }
-            ?.let { "Best was ${LanFormat.arrow(it)}." }
-        return listOfNotNull(themed ?: cost, best).joinToString(" ")
+        return MistakeNarrator.narrate(
+            fenBefore = fenBefore,
+            moveLan = moveLan,
+            bestLan = baseline.bestMoveLan,
+            replyLan = afterMove.bestMoveLan,
+            themes = ThemeTagger.tag(fenBefore, ply, moveLan, baseline, afterMove, lossCp),
+            evalBeforeCp = baseline.effectiveCp(),
+            evalAfterCp = -afterMove.effectiveCp()
+        )
     }
 
     private fun finishGame(ending: GameEnding, result: GameResult) {
