@@ -179,8 +179,14 @@ object MistakeNarrator {
                 "This turned a tough spot into a losing one."
             before == Standing.LOSING ->
                 "This made a difficult defense harder."
+            // Same-band slips (the grader can flag a move that doesn't
+            // change who stands better): each band gets its own texture
+            before == Standing.BETTER ->
+                "This blunted your edge — your opponent breathes easier now."
+            before == Standing.EVEN ->
+                "This gave your opponent the easier side of a level game."
             else ->
-                "This handed your opponent more play than you needed to."
+                "This dug the hole a little deeper."
         }
     }
 

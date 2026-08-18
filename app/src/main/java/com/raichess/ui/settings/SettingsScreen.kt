@@ -141,15 +141,17 @@ private fun CoachStyleRows(
                 .padding(top = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // The row is the single click target (onClick = null keeps the
+            // radio from doubling up the row's accessibility semantics)
             RadioButton(
                 selected = personality == selected,
-                onClick = { onSelected(personality) },
+                onClick = null,
                 colors = RadioButtonDefaults.colors(
                     selectedColor = ChessColors.ControlActive,
                     unselectedColor = ChessColors.ControlThumbInactive
                 )
             )
-            Column {
+            Column(modifier = Modifier.padding(start = 10.dp)) {
                 Text(
                     text = personality.label,
                     style = MaterialTheme.typography.bodyMedium,

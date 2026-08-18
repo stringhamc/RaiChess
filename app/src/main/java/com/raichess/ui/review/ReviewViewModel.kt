@@ -8,6 +8,7 @@ import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.data.database.AnalysisState
 import com.raichess.data.database.PositionEntity
 import com.raichess.data.repository.GameRepository
+import com.raichess.domain.model.EvalPerspective
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.PlayerColor
@@ -188,10 +189,13 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         val kind = if (row.classification == "BLUNDER") "Blunder" else "Mistake"
         val next = allRows.firstOrNull { it.ply == row.ply + 1 }
         // Stored evals are White-perspective; the narrator wants the player's
-        val sign = if (playerIsWhite) 1 else -1
-        val evalBefore = sign * row.evaluationCp
-        val evalAfter = next?.let { sign * it.evaluationCp }
-            ?: (evalBefore - (row.centipawnLoss ?: 0))
+        val evalBefore = EvalPerspective.toPlayer(row.evaluationCp, playerIsWhite)
+        val evalAfter = EvalPerspective.afterMove(
+            evalBeforePlayerCp = evalBefore,
+            nextEvalWhiteCp = next?.evaluationCp,
+            playerIsWhite = playerIsWhite,
+            lossCp = row.centipawnLoss
+        )
         val themes = ThemeTag.fromCsv(row.themes)
         val why = MistakeNarrator.narrate(
             fenBefore = row.fen,
