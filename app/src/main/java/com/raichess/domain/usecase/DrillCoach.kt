@@ -1,5 +1,6 @@
 package com.raichess.domain.usecase
 
+import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.ThemeTag
 
@@ -17,6 +18,12 @@ import com.raichess.domain.model.ThemeTag
  * bought by hints — means the position wasn't cleanly solved, so spaced
  * repetition brings it back sooner.
  *
+ * Conversational lines (misses, reveals, solves, the failure sign-off)
+ * come in one variant per [CoachPersonality]; the personality changes the
+ * delivery, never the information — every reveal names the move, every
+ * solve is a solve. Guidance content stays persona-free: what to look for
+ * is teaching, not chatter.
+ *
  * Pure text/threshold policy, testable without Android; the ladder state
  * itself lives in PracticeViewModel.
  */
@@ -33,13 +40,107 @@ object DrillCoach {
     }
 
     /** Tier 1: acknowledge the miss, don't teach yet. */
-    fun tryAgain(misses: Int): String =
-        if (misses <= 1) "Not that one — try again."
-        else "Still not it — take another look."
+    fun tryAgain(
+        misses: Int,
+        persona: CoachPersonality = CoachPersonality.MENTOR
+    ): String = when (persona) {
+        CoachPersonality.MENTOR ->
+            if (misses <= 1) "Not that one — try again."
+            else "Still not it — take another look."
+        CoachPersonality.FIREBRAND ->
+            if (misses <= 1) "Nope! Shake it off — you've got this."
+            else "Still hiding from you — hunt it down!"
+        CoachPersonality.SAGE ->
+            if (misses <= 1) "No. Look again."
+            else "Still no. Slow down — the position will tell you."
+    }
 
     /** Tier 3: the answer, spoken while the arrow points at it. */
-    fun reveal(expectedLan: String): String =
-        "Here it is: ${LanFormat.arrow(expectedLan)} — follow the arrow."
+    fun reveal(
+        expectedLan: String,
+        persona: CoachPersonality = CoachPersonality.MENTOR
+    ): String {
+        val move = LanFormat.arrow(expectedLan)
+        return when (persona) {
+            CoachPersonality.MENTOR -> "Here it is: $move — follow the arrow."
+            CoachPersonality.FIREBRAND -> "Here's the money move: $move — play it!"
+            CoachPersonality.SAGE -> "Observe: $move. Play it, and remember it."
+        }
+    }
+
+    /** A clean solve — no misses, no help. [streak] ≥ 3 earns extra noise. */
+    fun solvedClean(
+        streak: Int,
+        persona: CoachPersonality = CoachPersonality.MENTOR
+    ): String = when (persona) {
+        CoachPersonality.MENTOR ->
+            if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
+        CoachPersonality.FIREBRAND ->
+            if (streak >= 3) "$streak in a row — you're on fire!"
+            else "Boom — that's what I'm talking about!"
+        CoachPersonality.SAGE ->
+            if (streak >= 3) "Correct. $streak in a row — discipline."
+            else "Correct."
+    }
+
+    /** Solved after misses or bought guidance — the grind deserves its own line. */
+    fun solvedEarned(persona: CoachPersonality = CoachPersonality.MENTOR): String =
+        when (persona) {
+            CoachPersonality.MENTOR -> "There it is — you worked for that one."
+            CoachPersonality.FIREBRAND -> "Yes! You ground that one out — those count double."
+            CoachPersonality.SAGE -> "Correct — eventually. The struggle is where the learning is."
+        }
+
+    /** Solved with a stored near-best alternative, not the engine's first pick. */
+    fun solvedAsGood(
+        bestLan: String,
+        persona: CoachPersonality = CoachPersonality.MENTOR
+    ): String {
+        val move = LanFormat.arrow(bestLan)
+        return when (persona) {
+            CoachPersonality.MENTOR ->
+                "Solved! The engine liked $move — yours is just as good."
+            CoachPersonality.FIREBRAND ->
+                "Solved! The engine liked $move — yours lands just as hard."
+            CoachPersonality.SAGE ->
+                "Acceptable. The engine preferred $move, but yours holds."
+        }
+    }
+
+    /** The drill is over unsolved; spaced repetition will bring it back. */
+    fun failed(persona: CoachPersonality = CoachPersonality.MENTOR): String =
+        when (persona) {
+            CoachPersonality.MENTOR -> "It'll come back around."
+            CoachPersonality.FIREBRAND -> "We'll get it next lap — it's coming back around."
+            CoachPersonality.SAGE -> "Unsolved. It will return; be ready."
+        }
+
+    /** Opens the walkthrough recap, right after the revealed move lands. */
+    fun walkthroughOpener(persona: CoachPersonality = CoachPersonality.MENTOR): String =
+        when (persona) {
+            CoachPersonality.MENTOR -> "That's the one."
+            CoachPersonality.FIREBRAND -> "There it is!"
+            CoachPersonality.SAGE -> "So you see it now."
+        }
+
+    /** Closes the walkthrough recap — the lesson-not-a-loss sign-off. */
+    fun walkthroughCloser(persona: CoachPersonality = CoachPersonality.MENTOR): String =
+        when (persona) {
+            CoachPersonality.MENTOR -> "It'll come back around."
+            CoachPersonality.FIREBRAND -> "Next time it's all yours."
+            CoachPersonality.SAGE -> "It will return; be ready."
+        }
+
+    /** Walkthrough recap when the mistake has no stored explanation to quote. */
+    fun lineComplete(persona: CoachPersonality = CoachPersonality.MENTOR): String =
+        when (persona) {
+            CoachPersonality.MENTOR ->
+                "Line complete — we walked through it together. It'll come back around."
+            CoachPersonality.FIREBRAND ->
+                "Line finished — we tag-teamed that one. Next time it's all yours."
+            CoachPersonality.SAGE ->
+                "The line is complete. We moved through it together; next time, alone."
+        }
 
     /**
      * Tier-2 guidance keyed by Lichess puzzle themes, most specific first

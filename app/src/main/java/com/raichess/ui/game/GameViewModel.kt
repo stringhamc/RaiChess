@@ -20,6 +20,7 @@ import com.raichess.data.repository.DailyRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.SettingsRepository
+import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.CompletedGame
 import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloConfiguration
@@ -72,6 +73,8 @@ data class GameUiState(
     val moveSeq: Int = 0,
     // Overwritten from SettingsRepository at construction; on by default
     val animationsEnabled: Boolean = true,
+    /** Rai's delivery style; overwritten from SettingsRepository at construction. */
+    val coachPersonality: CoachPersonality = CoachPersonality.MENTOR,
     /** FEN piece chars ('P', 'k', ...) or null for empty, indexed a1=0 .. h8=63. */
     val squares: List<Char?> = emptyList(),
     val selectedSquare: Int? = null,
@@ -167,7 +170,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Seed the setup screen with the recommended opponent strength
                 opponentElo = EloConfiguration.getRecommendedOpponentElo(stats.currentElo),
                 gameMode = settingsRepository.gameMode,
-                animationsEnabled = settingsRepository.animationsEnabled
+                animationsEnabled = settingsRepository.animationsEnabled,
+                coachPersonality = settingsRepository.coachPersonality
             )
         }
     )
@@ -191,6 +195,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setAnimationsEnabled(enabled: Boolean) {
         settingsRepository.animationsEnabled = enabled
         _uiState.value = _uiState.value.copy(animationsEnabled = enabled)
+    }
+
+    fun setCoachPersonality(persona: CoachPersonality) {
+        settingsRepository.coachPersonality = persona
+        _uiState.value = _uiState.value.copy(coachPersonality = persona)
     }
 
     /**
@@ -871,7 +880,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     result = result,
                     newPeak = isNewPeak,
                     winStreak = stats.winStreak,
-                    calibrating = stats.gamesPlayed < EloCalculator.PROVISIONAL_GAMES
+                    calibrating = stats.gamesPlayed < EloCalculator.PROVISIONAL_GAMES,
+                    persona = settingsRepository.coachPersonality
                 )
             } else {
                 null

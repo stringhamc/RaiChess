@@ -17,6 +17,7 @@ import com.raichess.data.repository.LessonRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.PuzzleRepository
+import com.raichess.data.repository.SettingsRepository
 import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.PracticeRating
 import com.raichess.domain.model.ThemeTag
@@ -100,6 +101,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     private val profileRepository = PlayerProfileRepository(application)
     private val lessonRepository = LessonRepository(application)
     private val dailyRepository = DailyRepository(application)
+    private val settingsRepository = SettingsRepository(application)
+
+    // Read per use, not cached: a style switched in Settings takes effect
+    // on the coach's very next line
+    private val persona get() = settingsRepository.coachPersonality
 
     private var queue: List<DrillSelector.Drill> = emptyList()
     private var queueIndex = 0
@@ -417,8 +423,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 finishDrill(
                     solved = !revealUsed,
                     walkedThrough = revealUsed,
-                    solvedNote = "Solved! The engine liked " +
-                        "${LanFormat.arrow(mistake.bestMoveLan)} — yours is just as good."
+                    solvedNote = DrillCoach.solvedAsGood(mistake.bestMoveLan, persona)
                 )
             }
             else -> onMiss(move, mistake.bestMoveLan.lowercase())
@@ -437,10 +442,10 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         val prompt = when {
             escalated == DrillCoach.Assist.REVEAL -> {
                 revealUsed = true
-                DrillCoach.reveal(expectedLan)
+                DrillCoach.reveal(expectedLan, persona)
             }
             escalated != assist -> currentGuidance()
-            else -> DrillCoach.tryAgain(missCount)
+            else -> DrillCoach.tryAgain(missCount, persona)
         }
         assist = escalated
         _uiState.value = _uiState.value.copy(
@@ -475,7 +480,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         if (assist == DrillCoach.Assist.REVEAL) {
             revealUsed = true
             _uiState.value = state.copy(
-                prompt = DrillCoach.reveal(expected),
+                prompt = DrillCoach.reveal(expected, persona),
                 coachArrow = lanSquares(expected),
                 selectedSquare = null,
                 legalTargets = emptySet()
@@ -587,9 +592,9 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 walkedThrough -> walkedPrompt()
                 solved && solvedNote != null -> solvedNote
                 solved && (missCount > 0 || assist != DrillCoach.Assist.NONE) ->
-                    "There it is — you worked for that one."
-                solved -> if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
-                else -> "It'll come back around."
+                    DrillCoach.solvedEarned(persona)
+                solved -> DrillCoach.solvedClean(streak, persona)
+                else -> DrillCoach.failed(persona)
             },
             lessonJustCompletedTitle = lessonDoneTitle,
             lessonProgressText = lessonProgress ?: state.lessonProgressText,
@@ -639,11 +644,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         val why = mistake?.let { ThemeTag.explain(it.themes) }
         return if (mistake != null && why != null) {
             val threat = DrillCoach.threatClause(mistake.themes, mistake.punishLan)
-            "That's the one. In your game you played " +
+            "${DrillCoach.walkthroughOpener(persona)} In your game you played " +
                 "${LanFormat.arrow(mistake.playedLan)}, which $why$threat. " +
-                "It'll come back around."
+                DrillCoach.walkthroughCloser(persona)
         } else {
-            "Line complete — we walked through it together. It'll come back around."
+            DrillCoach.lineComplete(persona)
         }
     }
 
