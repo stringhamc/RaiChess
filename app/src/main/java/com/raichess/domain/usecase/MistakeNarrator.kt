@@ -185,6 +185,9 @@ object MistakeNarrator {
                 "This blunted your edge — your opponent breathes easier now."
             before == Standing.EVEN ->
                 "This gave your opponent the easier side of a level game."
+            // Only WORSE→(WORSE or better) remains. Graded moves never
+            // improve the standing (loss ≥ 0 on capped evals), so in
+            // practice this is the WORSE→WORSE same-band slip.
             else ->
                 "This dug the hole a little deeper."
         }

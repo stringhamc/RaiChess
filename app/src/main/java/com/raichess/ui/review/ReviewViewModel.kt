@@ -145,9 +145,10 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 val accuracy = game.accuracy
                     ?.let { " · Accuracy ${it.roundToInt()}%" } ?: ""
                 val rows = gameRepository.positionsForGame(game.id)
+                val rowsByPly = rows.associateBy { it.ply }
                 val mistakes = rows
                     .filter { it.isPlayerMove && it.classification in GRADED }
-                    .map { toUi(it, rows, playerColor == PlayerColor.WHITE) }
+                    .map { toUi(it, rowsByPly, playerColor == PlayerColor.WHITE) }
                 _uiState.value = ReviewUiState(
                     loading = false,
                     headline = "$resultWord vs ${game.opponentElo}$accuracy",
@@ -176,18 +177,19 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * One mistake row, narrated as the chess that went wrong rather than
-     * the centipawn bill: [allRows] supplies the next ply's stored analysis
-     * (same join the drill coach uses) — its best move is the opponent's
-     * punishing reply, its eval the post-move standing. No schema change.
+     * the centipawn bill: [rowsByPly] supplies the next ply's stored
+     * analysis (same join the drill coach uses) — its best move is the
+     * opponent's punishing reply, its eval the post-move standing. No
+     * schema change.
      */
     private fun toUi(
         row: PositionEntity,
-        allRows: List<PositionEntity>,
+        rowsByPly: Map<Int, PositionEntity>,
         playerIsWhite: Boolean
     ): ReviewMistakeUi {
         val best = row.bestMove?.let { moveSquares(it) }
         val kind = if (row.classification == "BLUNDER") "Blunder" else "Mistake"
-        val next = allRows.firstOrNull { it.ply == row.ply + 1 }
+        val next = rowsByPly[row.ply + 1]
         // Stored evals are White-perspective; the narrator wants the player's
         val evalBefore = EvalPerspective.toPlayer(row.evaluationCp, playerIsWhite)
         val evalAfter = EvalPerspective.afterMove(
