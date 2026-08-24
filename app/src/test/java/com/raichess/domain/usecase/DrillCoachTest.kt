@@ -9,13 +9,35 @@ import org.junit.Test
 class DrillCoachTest {
 
     @Test
-    fun `miss ladder climbs try-again to guidance to reveal`() {
+    fun `miss ladder climbs try-again, guidance, piece, reveal`() {
         assertEquals(DrillCoach.Assist.NONE, DrillCoach.assistForMisses(0))
         assertEquals(DrillCoach.Assist.NONE, DrillCoach.assistForMisses(1))
         assertEquals(DrillCoach.Assist.GUIDANCE, DrillCoach.assistForMisses(2))
-        assertEquals(DrillCoach.Assist.REVEAL, DrillCoach.assistForMisses(3))
+        assertEquals(DrillCoach.Assist.PIECE, DrillCoach.assistForMisses(3))
+        assertEquals(DrillCoach.Assist.REVEAL, DrillCoach.assistForMisses(4))
         // Past the reveal it stays revealed — no wrap-around
         assertEquals(DrillCoach.Assist.REVEAL, DrillCoach.assistForMisses(7))
+    }
+
+    @Test
+    fun `piece hint names the piece and its square but never the move`() {
+        // Knight on g3 (a1=0..h8=63: g3 = rank 2 · file 6 = 22)
+        val squares = List(64) { if (it == 22) 'N' else null }
+        for (persona in CoachPersonality.entries) {
+            val text = DrillCoach.pieceHint("g3e4", squares, persona)
+            assertTrue(text, "knight" in text)
+            assertTrue(text, "g3" in text)
+            // The destination stays the player's job on this rung
+            assertTrue(text, "e4" !in text)
+        }
+        assertEquals(22, DrillCoach.pieceHintSquare("g3e4"))
+    }
+
+    @Test
+    fun `piece hint degrades gracefully off an unreadable board`() {
+        val text = DrillCoach.pieceHint("g3e4", emptyList())
+        assertTrue(text, "piece" in text)
+        assertTrue(text, "g3" in text)
     }
 
     @Test
@@ -99,7 +121,8 @@ class DrillCoachTest {
             { p: CoachPersonality -> DrillCoach.solvedClean(1, p) },
             { p: CoachPersonality -> DrillCoach.solvedEarned(p) },
             { p: CoachPersonality -> DrillCoach.failed(p) },
-            { p: CoachPersonality -> DrillCoach.lineComplete(p) }
+            { p: CoachPersonality -> DrillCoach.lineComplete(p) },
+            { p: CoachPersonality -> DrillCoach.pieceHint("g3e4", emptyList(), p) }
         )) {
             val variants = CoachPersonality.entries.map { line(it) }
             assertEquals(

@@ -6,17 +6,21 @@ import com.raichess.domain.model.ThemeTag
 
 /**
  * Escalating in-drill coaching (field request): a wrong try shouldn't end
- * the drill — it starts a conversation. Three tiers per expected move:
+ * the drill — it starts a conversation. Four tiers per expected move:
  *
  *  1. first miss  — "not that one", try again; nothing is taught yet
  *  2. second miss — general guidance from the drill's themes: what KIND
  *     of idea to hunt for, never the move itself
- *  3. third miss  — the move, drawn as an arrow on the board
+ *  3. third miss  — the piece: name and highlight what has to move
+ *     (field request: after the strategy nudge, point at the piece) —
+ *     the destination stays the player's job
+ *  4. fourth miss — the move, drawn as an arrow on the board
  *
- * The Hint button climbs the same ladder without spending a miss (one tap
- * for guidance, another for the arrow). Any arrow — earned by misses or
- * bought by hints — means the position wasn't cleanly solved, so spaced
- * repetition brings it back sooner.
+ * The Hint button climbs the same ladder without spending a miss (one
+ * tap per rung). Only the arrow — earned by misses or bought by hints —
+ * means the position wasn't cleanly solved for spaced repetition:
+ * guidance and the piece nudge narrow the search, but the player still
+ * finds the move.
  *
  * Conversational lines (misses, reveals, solves, the failure sign-off)
  * come in one variant per [CoachPersonality]; the personality changes the
@@ -30,11 +34,12 @@ import com.raichess.domain.model.ThemeTag
 object DrillCoach {
 
     /** How much has been given away for the current expected move. */
-    enum class Assist { NONE, GUIDANCE, REVEAL }
+    enum class Assist { NONE, GUIDANCE, PIECE, REVEAL }
 
     /** Ladder tier a total of [misses] wrong tries has earned. */
     fun assistForMisses(misses: Int): Assist = when {
-        misses >= 3 -> Assist.REVEAL
+        misses >= 4 -> Assist.REVEAL
+        misses >= 3 -> Assist.PIECE
         misses >= 2 -> Assist.GUIDANCE
         else -> Assist.NONE
     }
@@ -55,7 +60,36 @@ object DrillCoach {
             else "Still no. Slow down — the position will tell you."
     }
 
-    /** Tier 3: the answer, spoken while the arrow points at it. */
+    /**
+     * Tier 3: name the piece that has to move, highlight its square, and
+     * leave the destination to the player. [squares] is the current board
+     * as FEN chars indexed a1=0..h8=63 ([HintAdvisor.parseFenBoard] /
+     * boardSnapshot form); an unreadable board degrades to "piece".
+     */
+    fun pieceHint(
+        expectedLan: String,
+        squares: List<Char?>,
+        persona: CoachPersonality = CoachPersonality.MENTOR
+    ): String {
+        val fromSquare = expectedLan.take(2)
+        val piece = HintAdvisor.squareOrdinal(fromSquare)
+            ?.let { squares.getOrNull(it) }
+            ?.let { HintAdvisor.pieceName(it) } ?: "piece"
+        return when (persona) {
+            CoachPersonality.MENTOR ->
+                "It's your $piece on $fromSquare — where does it want to go?"
+            CoachPersonality.FIREBRAND ->
+                "Your $piece on $fromSquare is the hero — find its move!"
+            CoachPersonality.SAGE ->
+                "The $piece on $fromSquare. Now find its square."
+        }
+    }
+
+    /** The square ordinal a [pieceHint] should highlight, or null if malformed. */
+    fun pieceHintSquare(expectedLan: String): Int? =
+        HintAdvisor.squareOrdinal(expectedLan.take(2))
+
+    /** Tier 4: the answer, spoken while the arrow points at it. */
     fun reveal(
         expectedLan: String,
         persona: CoachPersonality = CoachPersonality.MENTOR

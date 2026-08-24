@@ -51,11 +51,15 @@ data class PracticeUiState(
     val sourceLabel: String = "",
     val selectedSquare: Int? = null,
     val legalTargets: Set<Int> = emptySet(),
-    /** Squares to flash on reveal (the expected move). Render coach-amber. */
+    /**
+     * The coach's amber square highlights: the piece to move on the
+     * ladder's piece rung, then the played expected move on the reveal
+     * recap.
+     */
     val revealHighlights: Set<Int> = emptySet(),
     /**
-     * The expected move once the coaching ladder reveals it (3rd miss or
-     * 2nd hint), from→to ordinals. Render as the coach-amber arrow.
+     * The expected move once the coaching ladder reveals it (4th miss or
+     * 3rd hint), from→to ordinals. Render as the coach-amber arrow.
      */
     val coachArrow: Pair<Int, Int>? = null,
     /**
@@ -398,7 +402,10 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                     prompt = "Keep going — ${sideName(drill.solverSide)} to move",
                     coachArrow = null,
                     replyArrow = lanSquares(outcome.opponentReplyLan),
-                    wrongSquares = emptySet()
+                    wrongSquares = emptySet(),
+                    // The previous expected move's piece highlight must not
+                    // point at the wrong piece for the new one
+                    revealHighlights = emptySet()
                 )
             }
             PuzzleDrill.Outcome.Solved -> {
@@ -432,9 +439,10 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * A wrong try climbs the coaching ladder (DrillCoach): try-again →
-     * general guidance → the move itself as an arrow. The wrong try is
-     * marked on the board in coach-crimson; the position never changes,
-     * so the player iterates instead of watching the drill end.
+     * general guidance → the piece to move → the move itself as an arrow.
+     * The wrong try is marked on the board in coach-crimson; the position
+     * never changes, so the player iterates instead of watching the drill
+     * end.
      */
     private fun onMiss(move: Move, expectedLan: String) {
         missCount++
@@ -444,6 +452,8 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 revealUsed = true
                 DrillCoach.reveal(expectedLan, persona)
             }
+            escalated == DrillCoach.Assist.PIECE && escalated != assist ->
+                DrillCoach.pieceHint(expectedLan, boardSnapshot(), persona)
             escalated != assist -> currentGuidance()
             else -> DrillCoach.tryAgain(missCount, persona)
         }
@@ -453,6 +463,13 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             selectedSquare = null,
             legalTargets = emptySet(),
             wrongSquares = setOf(move.from.ordinal, move.to.ordinal),
+            // The piece rung lights the from-square (amber, same channel
+            // as the reveal recap); the arrow rung keeps it lit underneath
+            revealHighlights = if (assist >= DrillCoach.Assist.PIECE) {
+                setOfNotNull(DrillCoach.pieceHintSquare(expectedLan))
+            } else {
+                _uiState.value.revealHighlights
+            },
             coachArrow = if (assist == DrillCoach.Assist.REVEAL) {
                 lanSquares(expectedLan)
             } else {
@@ -463,8 +480,9 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * The Hint button climbs the same ladder without spending a miss: one
-     * tap buys guidance, the next the arrow. An arrow bought here scores
-     * the drill exactly like one earned by misses.
+     * tap per rung — guidance, then the piece, then the arrow. Only an
+     * arrow bought here scores the drill as not cleanly solved, exactly
+     * like one earned by misses.
      */
     fun onHint() {
         val state = _uiState.value
@@ -472,25 +490,37 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         val expected = activePuzzle?.expectedLan
             ?: activeMistake?.bestMoveLan?.lowercase()
             ?: return
-        assist = if (assist == DrillCoach.Assist.NONE) {
-            DrillCoach.Assist.GUIDANCE
-        } else {
-            DrillCoach.Assist.REVEAL
+        assist = when (assist) {
+            DrillCoach.Assist.NONE -> DrillCoach.Assist.GUIDANCE
+            DrillCoach.Assist.GUIDANCE -> DrillCoach.Assist.PIECE
+            else -> DrillCoach.Assist.REVEAL
         }
-        if (assist == DrillCoach.Assist.REVEAL) {
-            revealUsed = true
-            _uiState.value = state.copy(
-                prompt = DrillCoach.reveal(expected, persona),
-                coachArrow = lanSquares(expected),
-                selectedSquare = null,
-                legalTargets = emptySet()
-            )
-        } else {
-            _uiState.value = state.copy(
-                prompt = currentGuidance(),
-                selectedSquare = null,
-                legalTargets = emptySet()
-            )
+        when (assist) {
+            DrillCoach.Assist.REVEAL -> {
+                revealUsed = true
+                _uiState.value = state.copy(
+                    prompt = DrillCoach.reveal(expected, persona),
+                    coachArrow = lanSquares(expected),
+                    revealHighlights = setOfNotNull(DrillCoach.pieceHintSquare(expected)),
+                    selectedSquare = null,
+                    legalTargets = emptySet()
+                )
+            }
+            DrillCoach.Assist.PIECE -> {
+                _uiState.value = state.copy(
+                    prompt = DrillCoach.pieceHint(expected, boardSnapshot(), persona),
+                    revealHighlights = setOfNotNull(DrillCoach.pieceHintSquare(expected)),
+                    selectedSquare = null,
+                    legalTargets = emptySet()
+                )
+            }
+            else -> {
+                _uiState.value = state.copy(
+                    prompt = currentGuidance(),
+                    selectedSquare = null,
+                    legalTargets = emptySet()
+                )
+            }
         }
     }
 
