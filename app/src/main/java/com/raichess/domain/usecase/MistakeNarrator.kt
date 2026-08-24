@@ -339,15 +339,13 @@ object MistakeNarrator {
                 return false
             }
 
-            private fun pieceName(piece: Char?): String? = when (piece?.lowercaseChar()) {
-                'p' -> "pawn"
-                'n' -> "knight"
-                'b' -> "bishop"
-                'r' -> "rook"
-                'q' -> "queen"
-                'k' -> "king"
-                else -> null
-            }
+            /**
+             * [HintAdvisor.pieceName]'s table, but null for empty squares
+             * (callers use null as "not a capture" / "no piece to name").
+             */
+            private fun pieceName(piece: Char?): String? = piece
+                ?.let { HintAdvisor.pieceName(it) }
+                ?.takeIf { it != "piece" }
         }
     }
 }

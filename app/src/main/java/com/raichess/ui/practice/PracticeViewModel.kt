@@ -447,15 +447,12 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     private fun onMiss(move: Move, expectedLan: String) {
         missCount++
         val escalated = maxOf(assist, DrillCoach.assistForMisses(missCount))
-        val prompt = when {
-            escalated == DrillCoach.Assist.REVEAL -> {
-                revealUsed = true
-                DrillCoach.reveal(expectedLan, persona)
-            }
-            escalated == DrillCoach.Assist.PIECE && escalated != assist ->
-                DrillCoach.pieceHint(expectedLan, boardSnapshot(), persona)
-            escalated != assist -> currentGuidance()
-            else -> DrillCoach.tryAgain(missCount, persona)
+        // A repeat miss at the reveal repeats the reveal; a repeat miss
+        // below its tier just acknowledges the miss
+        val prompt = if (escalated == DrillCoach.Assist.REVEAL || escalated != assist) {
+            assistPrompt(escalated, expectedLan)
+        } else {
+            DrillCoach.tryAgain(missCount, persona)
         }
         assist = escalated
         _uiState.value = _uiState.value.copy(
@@ -463,20 +460,43 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             selectedSquare = null,
             legalTargets = emptySet(),
             wrongSquares = setOf(move.from.ordinal, move.to.ordinal),
-            // The piece rung lights the from-square (amber, same channel
-            // as the reveal recap); the arrow rung keeps it lit underneath
-            revealHighlights = if (assist >= DrillCoach.Assist.PIECE) {
-                setOfNotNull(DrillCoach.pieceHintSquare(expectedLan))
-            } else {
-                _uiState.value.revealHighlights
-            },
-            coachArrow = if (assist == DrillCoach.Assist.REVEAL) {
+            revealHighlights = assistHighlights(escalated, expectedLan),
+            coachArrow = if (escalated == DrillCoach.Assist.REVEAL) {
                 lanSquares(expectedLan)
             } else {
                 _uiState.value.coachArrow
             }
         )
     }
+
+    /**
+     * The one rung→content mapping shared by misses and the Hint button,
+     * so the two paths can't drift as the ladder grows. REVEAL marks the
+     * drill not-cleanly-solved as a side effect — the arrow is the only
+     * rung that gives the move away.
+     */
+    private fun assistPrompt(tier: DrillCoach.Assist, expectedLan: String): String =
+        when (tier) {
+            DrillCoach.Assist.REVEAL -> {
+                revealUsed = true
+                DrillCoach.reveal(expectedLan, persona)
+            }
+            DrillCoach.Assist.PIECE ->
+                DrillCoach.pieceHint(expectedLan, boardSnapshot(), persona)
+            else -> currentGuidance()
+        }
+
+    /**
+     * The piece rung lights the from-square (amber, same channel as the
+     * reveal recap); the arrow rung keeps it lit underneath; lower tiers
+     * leave the highlights as they are.
+     */
+    private fun assistHighlights(tier: DrillCoach.Assist, expectedLan: String): Set<Int> =
+        if (tier >= DrillCoach.Assist.PIECE) {
+            setOfNotNull(DrillCoach.pieceHintSquare(expectedLan))
+        } else {
+            _uiState.value.revealHighlights
+        }
 
     /**
      * The Hint button climbs the same ladder without spending a miss: one
@@ -495,33 +515,17 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             DrillCoach.Assist.GUIDANCE -> DrillCoach.Assist.PIECE
             else -> DrillCoach.Assist.REVEAL
         }
-        when (assist) {
-            DrillCoach.Assist.REVEAL -> {
-                revealUsed = true
-                _uiState.value = state.copy(
-                    prompt = DrillCoach.reveal(expected, persona),
-                    coachArrow = lanSquares(expected),
-                    revealHighlights = setOfNotNull(DrillCoach.pieceHintSquare(expected)),
-                    selectedSquare = null,
-                    legalTargets = emptySet()
-                )
-            }
-            DrillCoach.Assist.PIECE -> {
-                _uiState.value = state.copy(
-                    prompt = DrillCoach.pieceHint(expected, boardSnapshot(), persona),
-                    revealHighlights = setOfNotNull(DrillCoach.pieceHintSquare(expected)),
-                    selectedSquare = null,
-                    legalTargets = emptySet()
-                )
-            }
-            else -> {
-                _uiState.value = state.copy(
-                    prompt = currentGuidance(),
-                    selectedSquare = null,
-                    legalTargets = emptySet()
-                )
-            }
-        }
+        _uiState.value = state.copy(
+            prompt = assistPrompt(assist, expected),
+            revealHighlights = assistHighlights(assist, expected),
+            coachArrow = if (assist == DrillCoach.Assist.REVEAL) {
+                lanSquares(expected)
+            } else {
+                state.coachArrow
+            },
+            selectedSquare = null,
+            legalTargets = emptySet()
+        )
     }
 
     /** Tier-2 text for the active drill, from its themes. */

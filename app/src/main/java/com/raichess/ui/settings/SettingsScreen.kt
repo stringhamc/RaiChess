@@ -2,6 +2,7 @@ package com.raichess.ui.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -137,7 +139,13 @@ private fun CoachStyleRows(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onSelected(personality) }
+                // selectable + RadioButton role gives TalkBack the proper
+                // "radio, selected/not selected" semantics on the one target
+                .selectable(
+                    selected = personality == selected,
+                    role = Role.RadioButton,
+                    onClick = { onSelected(personality) }
+                )
                 .padding(top = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
