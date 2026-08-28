@@ -232,6 +232,9 @@ object MistakeNarrator {
             val mover = before[from] ?: return "The strongest plan started with $arrow."
             val victim = pieceName(before[to])
             val castles = mover.lowercaseChar() == 'k' && abs(from % 8 - to % 8) == 2
+            // One fact per move, most concrete first: a capturing
+            // promotion reads as the capture — what it wins is the lesson,
+            // the promotion is how
             return when {
                 castles -> "The move was $arrow — castle, and get your king to safety."
                 victim != null -> "The move was $arrow, taking the $victim."

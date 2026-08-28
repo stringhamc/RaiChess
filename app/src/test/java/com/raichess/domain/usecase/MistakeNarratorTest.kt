@@ -116,6 +116,30 @@ class MistakeNarratorTest {
     }
 
     @Test
+    fun `checking best move is described as a check`() {
+        // Rook a1 → a8 lands on the king's rank with an empty path: check,
+        // but not a capture — exercises the squareAttacked sliding-ray scan
+        val text = MistakeNarrator.narrate(
+            fenBefore = "4k3/8/8/8/8/8/8/R3K3 w Q - 0 1", moveLan = "e1e2",
+            bestLan = "a1a8", replyLan = null,
+            themes = setOf(ThemeTag.MIDDLEGAME),
+            evalBeforeCp = 200, evalAfterCp = -200
+        )
+        assertTrue(text, "The move was a1 → a8, with check." in text)
+    }
+
+    @Test
+    fun `promoting best move is described as a promotion`() {
+        val text = MistakeNarrator.narrate(
+            fenBefore = "4k3/6P1/8/8/8/8/8/4K3 w - - 0 1", moveLan = "e1e2",
+            bestLan = "g7g8q", replyLan = null,
+            themes = emptySet(),
+            evalBeforeCp = 200, evalAfterCp = -200
+        )
+        assertTrue(text, "that pawn promotes" in text)
+    }
+
+    @Test
     fun `malformed fen still narrates the standing shift`() {
         val text = MistakeNarrator.narrate(
             fenBefore = "not a fen", moveLan = "e2e4",
