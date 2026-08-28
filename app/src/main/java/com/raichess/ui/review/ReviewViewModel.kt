@@ -8,11 +8,13 @@ import com.raichess.data.analysis.AnalysisCoordinator
 import com.raichess.data.database.AnalysisState
 import com.raichess.data.database.PositionEntity
 import com.raichess.data.repository.GameRepository
+import com.raichess.domain.model.EvalPerspective
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.PlayerColor
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.HintAdvisor
+import com.raichess.domain.usecase.MistakeNarrator
 import com.raichess.ui.game.LastMove
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -24,7 +26,7 @@ import kotlinx.coroutines.launch
 data class ReviewMistakeUi(
     /** Full-move number the mistake happened on. */
     val moveNumber: Int,
-    /** "Blunder — lost 3.2 pawns". */
+    /** "Blunder — hung a piece". */
     val classificationLabel: String,
     /** What was played, what was best, and why it mattered. */
     val detail: String,
@@ -142,9 +144,11 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 val accuracy = game.accuracy
                     ?.let { " · Accuracy ${it.roundToInt()}%" } ?: ""
-                val mistakes = gameRepository.positionsForGame(game.id)
+                val rows = gameRepository.positionsForGame(game.id)
+                val rowsByPly = rows.associateBy { it.ply }
+                val mistakes = rows
                     .filter { it.isPlayerMove && it.classification in GRADED }
-                    .map { toUi(it) }
+                    .map { toUi(it, rowsByPly, playerColor == PlayerColor.WHITE) }
                 _uiState.value = ReviewUiState(
                     loading = false,
                     headline = "$resultWord vs ${game.opponentElo}$accuracy",
@@ -171,18 +175,44 @@ class ReviewViewModel(application: Application) : AndroidViewModel(application) 
         if (state.index > 0) _uiState.value = state.copy(index = state.index - 1)
     }
 
-    private fun toUi(row: PositionEntity): ReviewMistakeUi {
+    /**
+     * One mistake row, narrated as the chess that went wrong rather than
+     * the centipawn bill: [rowsByPly] supplies the next ply's stored
+     * analysis (same join the drill coach uses) — its best move is the
+     * opponent's punishing reply, its eval the post-move standing. No
+     * schema change.
+     */
+    private fun toUi(
+        row: PositionEntity,
+        rowsByPly: Map<Int, PositionEntity>,
+        playerIsWhite: Boolean
+    ): ReviewMistakeUi {
         val best = row.bestMove?.let { moveSquares(it) }
         val kind = if (row.classification == "BLUNDER") "Blunder" else "Mistake"
-        // Integer tenths keep the decimal locale-proof
-        val tenths = (row.centipawnLoss ?: 0) / 10
-        val why = ThemeTag.explain(ThemeTag.fromCsv(row.themes))
-            ?.let { " Your move $it." } ?: ""
-        val bestText = row.bestMove?.let { "; best was ${LanFormat.arrow(it)}" } ?: ""
+        val next = rowsByPly[row.ply + 1]
+        // Stored evals are White-perspective; the narrator wants the player's
+        val evalBefore = EvalPerspective.toPlayer(row.evaluationCp, playerIsWhite)
+        val evalAfter = EvalPerspective.afterMove(
+            evalBeforePlayerCp = evalBefore,
+            nextEvalWhiteCp = next?.evaluationCp,
+            playerIsWhite = playerIsWhite,
+            lossCp = row.centipawnLoss
+        )
+        val themes = ThemeTag.fromCsv(row.themes)
+        val why = MistakeNarrator.narrate(
+            fenBefore = row.fen,
+            moveLan = row.movePlayed,
+            bestLan = row.bestMove,
+            replyLan = next?.bestMove,
+            themes = themes,
+            evalBeforeCp = evalBefore,
+            evalAfterCp = evalAfter
+        )
         return ReviewMistakeUi(
             moveNumber = row.ply / 2 + 1,
-            classificationLabel = "$kind — lost ${tenths / 10}.${tenths % 10} pawns",
-            detail = "You played ${LanFormat.arrow(row.movePlayed)}$bestText.$why",
+            classificationLabel =
+                "$kind — ${MistakeNarrator.label(themes, evalBefore, evalAfter)}",
+            detail = "You played ${LanFormat.arrow(row.movePlayed)}. $why",
             squares = HintAdvisor.parseFenBoard(row.fen) ?: List(64) { null },
             playedMove = moveSquares(row.movePlayed),
             bestMove = best,

@@ -1,11 +1,12 @@
 package com.raichess.domain.usecase
 
+import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.EloCalculator
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameResult
+import com.raichess.domain.model.MoveClassifier
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.TrainingStatus
-import kotlin.math.roundToInt
 
 /**
  * The coach's voice: turns the player's data (rating, weakness profile,
@@ -109,27 +110,59 @@ object CoachAdvisor {
 
     /**
      * One-line reaction to a just-finished game, shown on the game-over
-     * screen. Same tone rules as [advise]; picks the most noteworthy thing
-     * about the result.
+     * screen. Picks the most noteworthy thing about the result, delivered
+     * in the selected [persona]'s voice — the same six situations rank the
+     * same way in every style, only the delivery changes.
      */
     fun react(
         result: GameResult,
         newPeak: Boolean,
         winStreak: Int,
-        calibrating: Boolean
-    ): String = when {
-        result == GameResult.WIN && newPeak ->
-            "New peak — that's real progress. Noted."
-        result == GameResult.WIN && winStreak >= 3 ->
-            "That's $winStreak in a row — you're trending up."
-        result == GameResult.WIN ->
-            "Well played. Ready for the next one when you are."
-        result == GameResult.DRAW ->
-            "A solid hold. Let's find the half-point you left behind."
-        calibrating ->
-            "Good data — I'm still finding your level, and this helps."
-        else ->
-            "Every loss is practice material — let's see what this one teaches."
+        calibrating: Boolean,
+        persona: CoachPersonality = CoachPersonality.MENTOR
+    ): String = when (persona) {
+        CoachPersonality.MENTOR -> when {
+            result == GameResult.WIN && newPeak ->
+                "New peak — that's real progress. Noted."
+            result == GameResult.WIN && winStreak >= 3 ->
+                "That's $winStreak in a row — you're trending up."
+            result == GameResult.WIN ->
+                "Well played. Ready for the next one when you are."
+            result == GameResult.DRAW ->
+                "A solid hold. Let's find the half-point you left behind."
+            calibrating ->
+                "Good data — I'm still finding your level, and this helps."
+            else ->
+                "Every loss is practice material — let's see what this one teaches."
+        }
+        CoachPersonality.FIREBRAND -> when {
+            result == GameResult.WIN && newPeak ->
+                "New peak! Frame it — then let's beat it."
+            result == GameResult.WIN && winStreak >= 3 ->
+                "$winStreak straight! Nobody's slowing you down!"
+            result == GameResult.WIN ->
+                "That's a win — bank it and rack the next one!"
+            result == GameResult.DRAW ->
+                "So close to the full point — next time we take it."
+            calibrating ->
+                "Good rounds — I'm dialing in your level, and you're tougher than you look."
+            else ->
+                "They caught us this time. Next game's the rematch — let's go."
+        }
+        CoachPersonality.SAGE -> when {
+            result == GameResult.WIN && newPeak ->
+                "A new peak. Don't admire it too long."
+            result == GameResult.WIN && winStreak >= 3 ->
+                "$winStreak consecutive. Consistency is the real skill."
+            result == GameResult.WIN ->
+                "Won. Study it anyway — wins hide mistakes."
+            result == GameResult.DRAW ->
+                "A draw. Half points add up; go find the other half."
+            calibrating ->
+                "Useful. I learn your level fastest from games like this."
+            else ->
+                "Lost. Good — losses are the only honest teachers."
+        }
     }
 
     /** First-run voice: no games yet, nothing to diagnose. */
@@ -149,11 +182,14 @@ object CoachAdvisor {
     private fun weaknessTalk(stat: ThemeStat): Pair<String, String> {
         val talk = WEAKNESS_TALK[stat.theme]
             ?: ("Let's train a pattern I keep seeing." to "One mistake type keeps recurring")
-        val pawns = (stat.avgLossCp / 100).roundToInt()
-        val cost = if (pawns >= 1) {
-            " — costing about $pawns ${if (pawns == 1) "pawn" else "pawns"} of position each time"
-        } else {
-            ""
+        // Severity in words, not centipawns — the count is an observation
+        // the player can verify, "3.2 pawns" is engine bookkeeping
+        val cost = when {
+            stat.avgLossCp >= MoveClassifier.BLUNDER_THRESHOLD_CP ->
+                " — and it's been swinging whole games"
+            stat.avgLossCp >= MoveClassifier.MISTAKE_THRESHOLD_CP ->
+                " — giving back real ground each time"
+            else -> ""
         }
         val times = if (stat.occurrences == 1) "once" else "${stat.occurrences}×"
         return talk.first to

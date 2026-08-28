@@ -96,7 +96,8 @@ object HintAdvisor {
         return board.toList()
     }
 
-    private fun pieceName(fenChar: Char): String = when (fenChar.lowercaseChar()) {
+    /** "n"/"N" → "knight"; unknown chars degrade to "piece". */
+    fun pieceName(fenChar: Char): String = when (fenChar.lowercaseChar()) {
         'p' -> "pawn"
         'n' -> "knight"
         'b' -> "bishop"

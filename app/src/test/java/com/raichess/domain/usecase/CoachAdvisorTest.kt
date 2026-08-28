@@ -1,10 +1,12 @@
 package com.raichess.domain.usecase
 
+import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.EloStats
 import com.raichess.domain.model.GameResult
 import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.model.TrainingStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -83,6 +85,17 @@ class CoachAdvisorTest {
     }
 
     @Test
+    fun `weakness severity is spoken in words, not pawn counts`() {
+        val blundery = WeaknessProfile(
+            weaknesses = listOf(themeStat(ThemeTag.HANGING_PIECE, avgLossCp = 350.0)),
+            phases = emptyList()
+        )
+        val advice = CoachAdvisor.advise(stats(15), blundery, defaultPlan, emptyMap())
+        assertTrue(advice.detail, advice.detail.contains("swinging whole games"))
+        assertFalse(advice.detail, advice.detail.contains("pawns"))
+    }
+
+    @Test
     fun `clean profile stays encouraging`() {
         val advice = CoachAdvisor.advise(stats(25), WeaknessProfile.EMPTY, defaultPlan, emptyMap())
         assertEquals("Looking sharp.", advice.headline)
@@ -98,6 +111,27 @@ class CoachAdvisorTest {
         assertTrue(advice.focuses.any { it.contains("loss") })
         // The lesson stays visible as a focus even when the loss leads
         assertTrue(advice.focuses.any { it.startsWith("Current lesson:") })
+    }
+
+    @Test
+    fun `every personality reacts to a game in its own voice`() {
+        val variants = CoachPersonality.entries.map { persona ->
+            CoachAdvisor.react(
+                GameResult.WIN, newPeak = true, winStreak = 1,
+                calibrating = false, persona = persona
+            )
+        }
+        // Distinct delivery, same information: it's a new peak in every voice
+        assertEquals(variants.toString(), variants.size, variants.toSet().size)
+        variants.forEach { assertTrue(it, it.contains("peak", ignoreCase = true)) }
+        // Streak wins carry the count in every voice
+        for (persona in CoachPersonality.entries) {
+            val streak = CoachAdvisor.react(
+                GameResult.WIN, newPeak = false, winStreak = 5,
+                calibrating = false, persona = persona
+            )
+            assertTrue(streak, "5" in streak)
+        }
     }
 
     @Test

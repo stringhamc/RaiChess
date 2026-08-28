@@ -17,6 +17,7 @@ import com.raichess.data.repository.LessonRepository
 import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.PuzzleRepository
+import com.raichess.data.repository.SettingsRepository
 import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.PracticeRating
 import com.raichess.domain.model.ThemeTag
@@ -50,11 +51,15 @@ data class PracticeUiState(
     val sourceLabel: String = "",
     val selectedSquare: Int? = null,
     val legalTargets: Set<Int> = emptySet(),
-    /** Squares to flash on reveal (the expected move). Render coach-amber. */
+    /**
+     * The coach's amber square highlights: the piece to move on the
+     * ladder's piece rung, then the played expected move on the reveal
+     * recap.
+     */
     val revealHighlights: Set<Int> = emptySet(),
     /**
-     * The expected move once the coaching ladder reveals it (3rd miss or
-     * 2nd hint), from→to ordinals. Render as the coach-amber arrow.
+     * The expected move once the coaching ladder reveals it (4th miss or
+     * 3rd hint), from→to ordinals. Render as the coach-amber arrow.
      */
     val coachArrow: Pair<Int, Int>? = null,
     /**
@@ -100,6 +105,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     private val profileRepository = PlayerProfileRepository(application)
     private val lessonRepository = LessonRepository(application)
     private val dailyRepository = DailyRepository(application)
+    private val settingsRepository = SettingsRepository(application)
+
+    // Read per use, not cached: a style switched in Settings takes effect
+    // on the coach's very next line
+    private val persona get() = settingsRepository.coachPersonality
 
     private var queue: List<DrillSelector.Drill> = emptyList()
     private var queueIndex = 0
@@ -392,7 +402,10 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                     prompt = "Keep going — ${sideName(drill.solverSide)} to move",
                     coachArrow = null,
                     replyArrow = lanSquares(outcome.opponentReplyLan),
-                    wrongSquares = emptySet()
+                    wrongSquares = emptySet(),
+                    // The previous expected move's piece highlight must not
+                    // point at the wrong piece for the new one
+                    revealHighlights = emptySet()
                 )
             }
             PuzzleDrill.Outcome.Solved -> {
@@ -417,8 +430,7 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 finishDrill(
                     solved = !revealUsed,
                     walkedThrough = revealUsed,
-                    solvedNote = "Solved! The engine liked " +
-                        "${LanFormat.arrow(mistake.bestMoveLan)} — yours is just as good."
+                    solvedNote = DrillCoach.solvedAsGood(mistake.bestMoveLan, persona)
                 )
             }
             else -> onMiss(move, mistake.bestMoveLan.lowercase())
@@ -427,20 +439,20 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * A wrong try climbs the coaching ladder (DrillCoach): try-again →
-     * general guidance → the move itself as an arrow. The wrong try is
-     * marked on the board in coach-crimson; the position never changes,
-     * so the player iterates instead of watching the drill end.
+     * general guidance → the piece to move → the move itself as an arrow.
+     * The wrong try is marked on the board in coach-crimson; the position
+     * never changes, so the player iterates instead of watching the drill
+     * end.
      */
     private fun onMiss(move: Move, expectedLan: String) {
         missCount++
         val escalated = maxOf(assist, DrillCoach.assistForMisses(missCount))
-        val prompt = when {
-            escalated == DrillCoach.Assist.REVEAL -> {
-                revealUsed = true
-                DrillCoach.reveal(expectedLan)
-            }
-            escalated != assist -> currentGuidance()
-            else -> DrillCoach.tryAgain(missCount)
+        // A repeat miss at the reveal repeats the reveal; a repeat miss
+        // below its tier just acknowledges the miss
+        val prompt = if (escalated == DrillCoach.Assist.REVEAL || escalated != assist) {
+            assistPrompt(escalated, expectedLan)
+        } else {
+            DrillCoach.tryAgain(missCount, persona)
         }
         assist = escalated
         _uiState.value = _uiState.value.copy(
@@ -448,7 +460,8 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             selectedSquare = null,
             legalTargets = emptySet(),
             wrongSquares = setOf(move.from.ordinal, move.to.ordinal),
-            coachArrow = if (assist == DrillCoach.Assist.REVEAL) {
+            revealHighlights = assistHighlights(escalated, expectedLan),
+            coachArrow = if (escalated == DrillCoach.Assist.REVEAL) {
                 lanSquares(expectedLan)
             } else {
                 _uiState.value.coachArrow
@@ -457,9 +470,39 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
+     * The one rung→content mapping shared by misses and the Hint button,
+     * so the two paths can't drift as the ladder grows. REVEAL marks the
+     * drill not-cleanly-solved as a side effect — the arrow is the only
+     * rung that gives the move away.
+     */
+    private fun assistPrompt(tier: DrillCoach.Assist, expectedLan: String): String =
+        when (tier) {
+            DrillCoach.Assist.REVEAL -> {
+                revealUsed = true
+                DrillCoach.reveal(expectedLan, persona)
+            }
+            DrillCoach.Assist.PIECE ->
+                DrillCoach.pieceHint(expectedLan, boardSnapshot(), persona)
+            else -> currentGuidance()
+        }
+
+    /**
+     * The piece rung lights the from-square (amber, same channel as the
+     * reveal recap); the arrow rung keeps it lit underneath; lower tiers
+     * leave the highlights as they are.
+     */
+    private fun assistHighlights(tier: DrillCoach.Assist, expectedLan: String): Set<Int> =
+        if (tier >= DrillCoach.Assist.PIECE) {
+            setOfNotNull(DrillCoach.pieceHintSquare(expectedLan))
+        } else {
+            _uiState.value.revealHighlights
+        }
+
+    /**
      * The Hint button climbs the same ladder without spending a miss: one
-     * tap buys guidance, the next the arrow. An arrow bought here scores
-     * the drill exactly like one earned by misses.
+     * tap per rung — guidance, then the piece, then the arrow. Only an
+     * arrow bought here scores the drill as not cleanly solved, exactly
+     * like one earned by misses.
      */
     fun onHint() {
         val state = _uiState.value
@@ -467,26 +510,22 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         val expected = activePuzzle?.expectedLan
             ?: activeMistake?.bestMoveLan?.lowercase()
             ?: return
-        assist = if (assist == DrillCoach.Assist.NONE) {
-            DrillCoach.Assist.GUIDANCE
-        } else {
-            DrillCoach.Assist.REVEAL
+        assist = when (assist) {
+            DrillCoach.Assist.NONE -> DrillCoach.Assist.GUIDANCE
+            DrillCoach.Assist.GUIDANCE -> DrillCoach.Assist.PIECE
+            else -> DrillCoach.Assist.REVEAL
         }
-        if (assist == DrillCoach.Assist.REVEAL) {
-            revealUsed = true
-            _uiState.value = state.copy(
-                prompt = DrillCoach.reveal(expected),
-                coachArrow = lanSquares(expected),
-                selectedSquare = null,
-                legalTargets = emptySet()
-            )
-        } else {
-            _uiState.value = state.copy(
-                prompt = currentGuidance(),
-                selectedSquare = null,
-                legalTargets = emptySet()
-            )
-        }
+        _uiState.value = state.copy(
+            prompt = assistPrompt(assist, expected),
+            revealHighlights = assistHighlights(assist, expected),
+            coachArrow = if (assist == DrillCoach.Assist.REVEAL) {
+                lanSquares(expected)
+            } else {
+                state.coachArrow
+            },
+            selectedSquare = null,
+            legalTargets = emptySet()
+        )
     }
 
     /** Tier-2 text for the active drill, from its themes. */
@@ -587,9 +626,9 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
                 walkedThrough -> walkedPrompt()
                 solved && solvedNote != null -> solvedNote
                 solved && (missCount > 0 || assist != DrillCoach.Assist.NONE) ->
-                    "There it is — you worked for that one."
-                solved -> if (streak >= 3) "Solved! $streak in a row!" else "Solved!"
-                else -> "It'll come back around."
+                    DrillCoach.solvedEarned(persona)
+                solved -> DrillCoach.solvedClean(streak, persona)
+                else -> DrillCoach.failed(persona)
             },
             lessonJustCompletedTitle = lessonDoneTitle,
             lessonProgressText = lessonProgress ?: state.lessonProgressText,
@@ -639,11 +678,11 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
         val why = mistake?.let { ThemeTag.explain(it.themes) }
         return if (mistake != null && why != null) {
             val threat = DrillCoach.threatClause(mistake.themes, mistake.punishLan)
-            "That's the one. In your game you played " +
+            "${DrillCoach.walkthroughOpener(persona)} In your game you played " +
                 "${LanFormat.arrow(mistake.playedLan)}, which $why$threat. " +
-                "It'll come back around."
+                DrillCoach.walkthroughCloser(persona)
         } else {
-            "Line complete — we walked through it together. It'll come back around."
+            DrillCoach.lineComplete(persona)
         }
     }
 
