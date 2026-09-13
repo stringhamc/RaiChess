@@ -1,5 +1,6 @@
 package com.raichess.domain.usecase
 
+import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.ThemeTag
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -8,13 +9,35 @@ import org.junit.Test
 class DrillCoachTest {
 
     @Test
-    fun `miss ladder climbs try-again to guidance to reveal`() {
+    fun `miss ladder climbs try-again, guidance, piece, reveal`() {
         assertEquals(DrillCoach.Assist.NONE, DrillCoach.assistForMisses(0))
         assertEquals(DrillCoach.Assist.NONE, DrillCoach.assistForMisses(1))
         assertEquals(DrillCoach.Assist.GUIDANCE, DrillCoach.assistForMisses(2))
-        assertEquals(DrillCoach.Assist.REVEAL, DrillCoach.assistForMisses(3))
+        assertEquals(DrillCoach.Assist.PIECE, DrillCoach.assistForMisses(3))
+        assertEquals(DrillCoach.Assist.REVEAL, DrillCoach.assistForMisses(4))
         // Past the reveal it stays revealed — no wrap-around
         assertEquals(DrillCoach.Assist.REVEAL, DrillCoach.assistForMisses(7))
+    }
+
+    @Test
+    fun `piece hint names the piece and its square but never the move`() {
+        // Knight on g3 (a1=0..h8=63: g3 = rank 2 · file 6 = 22)
+        val squares = List(64) { if (it == 22) 'N' else null }
+        for (persona in CoachPersonality.entries) {
+            val text = DrillCoach.pieceHint("g3e4", squares, persona)
+            assertTrue(text, "knight" in text)
+            assertTrue(text, "g3" in text)
+            // The destination stays the player's job on this rung
+            assertTrue(text, "e4" !in text)
+        }
+        assertEquals(22, DrillCoach.pieceHintSquare("g3e4"))
+    }
+
+    @Test
+    fun `piece hint degrades gracefully off an unreadable board`() {
+        val text = DrillCoach.pieceHint("g3e4", emptyList())
+        assertTrue(text, "piece" in text)
+        assertTrue(text, "g3" in text)
     }
 
     @Test
@@ -77,5 +100,48 @@ class DrillCoachTest {
     @Test
     fun `try-again escalates its wording on repeat misses`() {
         assertTrue(DrillCoach.tryAgain(1) != DrillCoach.tryAgain(2))
+    }
+
+    @Test
+    fun `default persona keeps the original wording`() {
+        // MENTOR is the default parameter AND the original voice: a player
+        // who never opens the setting sees exactly the old coach
+        assertEquals("Not that one — try again.", DrillCoach.tryAgain(1))
+        assertEquals("Here it is: a1 → a8 — follow the arrow.", DrillCoach.reveal("a1a8"))
+        assertEquals("Solved!", DrillCoach.solvedClean(streak = 1))
+        assertEquals("There it is — you worked for that one.", DrillCoach.solvedEarned())
+        assertEquals("It'll come back around.", DrillCoach.failed())
+    }
+
+    @Test
+    fun `each personality speaks with its own voice`() {
+        for (line in listOf(
+            { p: CoachPersonality -> DrillCoach.tryAgain(1, p) },
+            { p: CoachPersonality -> DrillCoach.reveal("a1a8", p) },
+            { p: CoachPersonality -> DrillCoach.solvedClean(1, p) },
+            { p: CoachPersonality -> DrillCoach.solvedEarned(p) },
+            { p: CoachPersonality -> DrillCoach.failed(p) },
+            { p: CoachPersonality -> DrillCoach.lineComplete(p) },
+            { p: CoachPersonality -> DrillCoach.pieceHint("g3e4", emptyList(), p) }
+        )) {
+            val variants = CoachPersonality.entries.map { line(it) }
+            assertEquals(
+                "personas must not share lines: $variants",
+                variants.size, variants.toSet().size
+            )
+        }
+    }
+
+    @Test
+    fun `personality changes delivery, never the information`() {
+        for (persona in CoachPersonality.entries) {
+            // Every reveal names the move — no style may withhold the answer
+            assertTrue(DrillCoach.reveal("a1a8", persona), "a1 → a8" in DrillCoach.reveal("a1a8", persona))
+            assertTrue("b2b4 in ${persona.name}", "b2 → b4" in DrillCoach.solvedAsGood("b2b4", persona))
+            // Every streak celebration carries the count
+            assertTrue("streak in ${persona.name}", "4" in DrillCoach.solvedClean(4, persona))
+            // Every first-miss line still escalates on repeat misses
+            assertTrue(DrillCoach.tryAgain(1, persona) != DrillCoach.tryAgain(2, persona))
+        }
     }
 }

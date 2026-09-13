@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -26,11 +29,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.raichess.BuildConfig
 import com.raichess.data.diagnostics.EngineDiagnostics
+import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.EloStats
 import com.raichess.ui.components.RaiScreen
 import com.raichess.ui.components.RecordRow
@@ -50,6 +55,8 @@ fun SettingsScreen(
     onAnimationsChanged: (Boolean) -> Unit,
     boardColorized: Boolean,
     onBoardColorizedChanged: (Boolean) -> Unit,
+    coachPersonality: CoachPersonality,
+    onCoachPersonalityChanged: (CoachPersonality) -> Unit,
     onBack: () -> Unit
 ) {
     RaiScreen(title = "Settings", onBack = onBack) {
@@ -97,6 +104,14 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(26.dp))
 
+        // Coach style — delivery only: every style teaches the same chess
+        CoachStyleRows(
+            selected = coachPersonality,
+            onSelected = onCoachPersonalityChanged
+        )
+
+        Spacer(modifier = Modifier.height(26.dp))
+
         EngineLogRow()
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -106,6 +121,57 @@ fun SettingsScreen(
             letterSpacing = 1.sp,
             color = MaterialTheme.colorScheme.secondary
         )
+    }
+}
+
+/**
+ * Rai's delivery style: one radio row per [CoachPersonality]. The chess
+ * the coach teaches is identical in every style — only the voice changes —
+ * so this sits with the other cosmetic preferences.
+ */
+@Composable
+private fun CoachStyleRows(
+    selected: CoachPersonality,
+    onSelected: (CoachPersonality) -> Unit
+) {
+    SectionLabel(text = "Coach style")
+    CoachPersonality.entries.forEach { personality ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // selectable + RadioButton role gives TalkBack the proper
+                // "radio, selected/not selected" semantics on the one target
+                .selectable(
+                    selected = personality == selected,
+                    role = Role.RadioButton,
+                    onClick = { onSelected(personality) }
+                )
+                .padding(top = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // The row is the single click target (onClick = null keeps the
+            // radio from doubling up the row's accessibility semantics)
+            RadioButton(
+                selected = personality == selected,
+                onClick = null,
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = ChessColors.ControlActive,
+                    unselectedColor = ChessColors.ControlThumbInactive
+                )
+            )
+            Column(modifier = Modifier.padding(start = 10.dp)) {
+                Text(
+                    text = personality.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = personality.tagline,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
     }
 }
 

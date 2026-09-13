@@ -2,6 +2,7 @@ package com.raichess.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.GameMode
 
 /**
@@ -47,10 +48,21 @@ class SettingsRepository(context: Context) {
             prefs.edit().putString(KEY_GAME_MODE, value.name).apply()
         }
 
+    /**
+     * Rai's delivery style (see [CoachPersonality]); default is the
+     * original warm voice, and unknown stored values fall back to it.
+     */
+    var coachPersonality: CoachPersonality
+        get() = CoachPersonality.fromName(prefs.getString(KEY_COACH_PERSONALITY, null))
+        set(value) {
+            prefs.edit().putString(KEY_COACH_PERSONALITY, value.name).apply()
+        }
+
     companion object {
         private const val PREFS_NAME = "raichess_settings"
         private const val KEY_ANIMATIONS = "animations_enabled"
         private const val KEY_BOARD_COLORIZED = "board_colorized"
         private const val KEY_GAME_MODE = "game_mode"
+        private const val KEY_COACH_PERSONALITY = "coach_personality"
     }
 }

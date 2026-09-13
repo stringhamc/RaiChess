@@ -317,6 +317,8 @@ fun RaiChessApp(viewModel: GameViewModel = viewModel()) {
                 viewModel.setBoardColorized(enabled)
                 ChessColors.colorized = enabled
             },
+            coachPersonality = state.coachPersonality,
+            onCoachPersonalityChanged = viewModel::setCoachPersonality,
             onBack = { screen = Screen.Home }
         )
     }
