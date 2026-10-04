@@ -49,6 +49,11 @@ jobs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        # The action's default also installs the legacy 'tools' package,
+        # which current cmdline-tools (16.0+) no longer carries — sdkmanager
+        # fails "Failed to find package 'tools'" before any build step runs
+        packages: 'platform-tools'
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
