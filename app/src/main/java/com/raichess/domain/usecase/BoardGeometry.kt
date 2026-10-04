@@ -106,10 +106,10 @@ internal object BoardGeometry {
     fun squareAttacked(board: List<Char?>, square: Int, byWhite: Boolean): Boolean =
         attackers(board, square, byWhite).isNotEmpty()
 
-    /** Is [byWhite]'s king in check on [board]? */
-    fun inCheck(board: List<Char?>, byWhite: Boolean): Boolean {
-        val king = board.indexOfFirst { it == if (byWhite) 'K' else 'k' }
-        return king >= 0 && squareAttacked(board, king, byWhite = !byWhite)
+    /** Is White's king ([whiteKing]) or Black's in check on [board]? */
+    fun inCheck(board: List<Char?>, whiteKing: Boolean): Boolean {
+        val king = board.indexOfFirst { it == if (whiteKing) 'K' else 'k' }
+        return king >= 0 && squareAttacked(board, king, byWhite = !whiteKing)
     }
 
     /** Material value in centipawns; kings are priceless. */

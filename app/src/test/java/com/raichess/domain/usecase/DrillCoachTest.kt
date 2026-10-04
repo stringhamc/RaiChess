@@ -229,4 +229,20 @@ class DrillCoachTest {
             recap
         )
     }
+
+    @Test
+    fun `field report recap makes no hung-queen claim when the engine declines the capture`() {
+        // ...Qa2 isn't tagged once the engine's reply (f2-f4) doesn't take
+        // the queen, and that quiet reply has nothing to describe
+        assertEquals(
+            "d5 → a2 attacks the rook on a1.",
+            DrillCoach.mistakeRecap(
+                fen = "1r5r/p1p1k1pp/2n1bp2/3qP3/Q2P2P1/P1pP3P/4PP1N/RN2KBR1 b - - 0 25",
+                bestLan = "d5a2",
+                playedLan = "c6d4",
+                mistakeThemes = setOf(ThemeTag.MIDDLEGAME),
+                punishLan = "f2f4"
+            )
+        )
+    }
 }

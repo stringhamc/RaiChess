@@ -247,7 +247,7 @@ object MistakeNarrator {
 
         private fun givesCheck(lan: String, moverIsWhite: Boolean): Boolean {
             val position = BoardGeometry.applied(before, lan) ?: return false
-            return BoardGeometry.inCheck(position, byWhite = !moverIsWhite)
+            return BoardGeometry.inCheck(position, whiteKing = !moverIsWhite)
         }
 
         companion object {

@@ -169,10 +169,13 @@ class StockfishNativeEngine(
                 if (best == null || latest.isEmpty()) {
                     return listOfNotNull(analyze(board, moveTimeMs))
                 }
+                // All or nothing: callers read line 1 as the best line, so
+                // dropping just a bad one could promote line 2 in its place
+                if (latest.values.any { !StockfishWasmEngine.isResultFor(board, best, it.pv) }) {
+                    Log.w(TAG, "MultiPV result doesn't fit the position; single-line fallback")
+                    return listOfNotNull(analyze(board, moveTimeMs))
+                }
                 latest.entries.sortedBy { it.key }.mapNotNull { (_, info) ->
-                    if (!StockfishWasmEngine.isResultFor(board, best, info.pv)) {
-                        return@mapNotNull null
-                    }
                     val lan = info.pv.firstOrNull()?.lowercase() ?: return@mapNotNull null
                     PositionAnalysis(
                         scoreCp = info.scoreCp,

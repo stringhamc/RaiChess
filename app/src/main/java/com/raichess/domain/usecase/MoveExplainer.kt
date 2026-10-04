@@ -66,7 +66,7 @@ object MoveExplainer {
         val facts = mutableListOf<String>()
 
         if (mover.lowercaseChar() == 'k' && abs(from % 8 - to % 8) == 2) {
-            facts.add("castles your king to safety")
+            facts.add("castles")
         }
 
         val victim = before[to]?.takeIf { isEnemy(it) }
@@ -90,7 +90,7 @@ object MoveExplainer {
         // New targets: enemy pieces this piece now hits that it didn't
         // before, and that can't simply be defended (loose, or worth more
         // than the attacker). The enemy king counts toward a fork.
-        val check = BoardGeometry.inCheck(after, byWhite = !white)
+        val check = BoardGeometry.inCheck(after, whiteKing = !white)
         val hitBefore = if (from == to) emptySet() else BoardGeometry.attacksFrom(before, from)
         val targets = BoardGeometry.attacksFrom(after, to)
             .filter { s -> s != to && s !in hitBefore && isEnemy(after[s]) }

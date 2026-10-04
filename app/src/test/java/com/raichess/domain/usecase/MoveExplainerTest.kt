@@ -69,7 +69,7 @@ class MoveExplainerTest {
     @Test
     fun `castling and promotion are named`() {
         assertEquals(
-            "e1 → g1 castles your king to safety.",
+            "e1 → g1 castles.",
             MoveExplainer.whyBest("4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1")
         )
         assertEquals(
