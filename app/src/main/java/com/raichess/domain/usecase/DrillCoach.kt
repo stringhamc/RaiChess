@@ -243,8 +243,13 @@ object DrillCoach {
             "Compare your candidate moves: for each one, what's the opponent's best reply?"
     }
 
-    /** Explanations whose lesson is the opponent's reply to the game move. */
-    private val REPLY_SHAPED = setOf(ThemeTag.ALLOWED_MATE, ThemeTag.HANGING_PIECE, ThemeTag.ALLOWED_TACTIC)
+    /**
+     * Explanations whose lesson is the opponent's reply to the game move.
+     * Not ALLOWED_MATE: the reply only starts the mate, so describing it
+     * ("takes your rook") would bury the point; that one keeps
+     * [threatClause]'s "(x was the threat)".
+     */
+    private val REPLY_SHAPED = setOf(ThemeTag.HANGING_PIECE, ThemeTag.ALLOWED_TACTIC)
         .mapNotNull { it.explanation }
         .toSet()
 
@@ -253,9 +258,9 @@ object DrillCoach {
      * the game move's flaw but never said why the engine's move works, or
      * what exactly the game move ran into):
      *
-     *   "d5 → c5 gets your queen out of danger. In your game you played
-     *    d5 → a2, which left a piece where it could be taken for free:
-     *    a1 → a2 takes your queen."
+     *   "a1 → a8 wins the undefended rook and gives check. In your game
+     *    you played h2 → h3, which allowed a tactic that wins material:
+     *    a8 → a1 wins your undefended rook and gives check."
      *
      * Either half drops out when there's nothing concrete to say; null
      * when neither has anything. Persona-free — it's teaching, not chatter.

@@ -20,7 +20,7 @@ object MoveExplainer {
 
     /**
      * Why [bestLan] works from [fenBefore], as a sentence:
-     * "d5 → c5 gets your queen out of danger and protects your knight on c6."
+     * "d5 → c5 gets your queen out of danger and saves your knight on c6."
      */
     fun whyBest(fenBefore: String, bestLan: String): String? {
         val before = HintAdvisor.parseFenBoard(fenBefore) ?: return null
@@ -75,8 +75,11 @@ object MoveExplainer {
             facts.add(
                 when {
                     undefended -> "wins $enemyOwner undefended ${name(victim)}"
-                    BoardGeometry.value(victim) > BoardGeometry.value(mover) ->
-                        "wins $enemyOwner ${name(victim)}"
+                    // Defended, so say what it costs: the recapture is coming
+                    BoardGeometry.value(victim) > BoardGeometry.value(mover) -> {
+                        val price = if (enemyOwner == "your") "a" else "your"
+                        "wins $enemyOwner ${name(victim)} for $price ${name(mover)}"
+                    }
                     else -> "takes $enemyOwner ${name(victim)}"
                 }
             )
@@ -123,7 +126,9 @@ object MoveExplainer {
             }
             if (rescued != null) {
                 val piece = name(before[rescued]!!)
-                facts.add("protects your $piece on ${BoardGeometry.squareName(rescued)}")
+                // "Saves", not "protects": the threat may be gone because
+                // the move defended, blocked, or removed the attacker
+                facts.add("saves your $piece on ${BoardGeometry.squareName(rescued)}")
             }
         }
 

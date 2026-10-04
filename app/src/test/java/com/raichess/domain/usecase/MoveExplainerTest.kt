@@ -13,7 +13,7 @@ class MoveExplainerTest {
     fun `a capture of something worth more wins it, and check is named`() {
         // Rd1xd8+: the queen is defended by the king, but worth more than the rook
         assertEquals(
-            "d1 → d8 wins the queen and gives check.",
+            "d1 → d8 wins the queen for your rook and gives check.",
             MoveExplainer.whyBest("3qk3/8/8/8/8/8/8/3RK3 w - - 0 1", "d1d8")
         )
     }
@@ -35,10 +35,10 @@ class MoveExplainerTest {
     }
 
     @Test
-    fun `covering a threatened piece protects it`() {
+    fun `covering a threatened piece saves it`() {
         // The b5 knight hangs to the b8 rook... until Kc4 covers it
         assertEquals(
-            "c3 → c4 protects your knight on b5.",
+            "c3 → c4 saves your knight on b5.",
             MoveExplainer.whyBest("1r2k3/8/8/1N6/8/2K5/8/8 w - - 0 1", "c3c4")
         )
     }
@@ -51,7 +51,7 @@ class MoveExplainerTest {
     @Test
     fun `the punishing reply names what it took`() {
         assertEquals(
-            "a1 → a2 wins your queen",
+            "a1 → a2 wins your queen for a rook",
             MoveExplainer.whyPunished(fieldFen, "d5a2", "a1a2")
         )
         assertEquals(
@@ -64,5 +64,26 @@ class MoveExplainerTest {
     fun `malformed input is silent`() {
         assertNull(MoveExplainer.whyBest("not a fen", "e2e4"))
         assertNull(MoveExplainer.whyPunished(fieldFen, "zz", "a1a2"))
+    }
+
+    @Test
+    fun `castling and promotion are named`() {
+        assertEquals(
+            "e1 → g1 castles your king to safety.",
+            MoveExplainer.whyBest("4k3/8/8/8/8/8/8/4K2R w K - 0 1", "e1g1")
+        )
+        assertEquals(
+            "b7 → b8 (=Q) promotes to a queen.",
+            MoveExplainer.whyBest("8/1P5k/8/8/8/8/8/4K3 w - - 0 1", "b7b8q")
+        )
+    }
+
+    @Test
+    fun `a defended prize taken by the opponent says what it cost them`() {
+        // Qd4-d8+ lands on a square the a8 rook takes; Rd1 recaptures
+        assertEquals(
+            "a8 → d8 wins your queen for a rook",
+            MoveExplainer.whyPunished("r6k/8/8/8/3Q4/8/8/2KR4 w - - 0 1", "d4d8", "a8d8")
+        )
     }
 }

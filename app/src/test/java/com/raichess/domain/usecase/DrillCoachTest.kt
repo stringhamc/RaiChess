@@ -171,7 +171,7 @@ class DrillCoachTest {
     fun `mistake recap says why the best move works`() {
         // Untagged blunder: the best move's reason, then the reply it ran into
         assertEquals(
-            "d1 → d8 wins the queen and gives check. " +
+            "d1 → d8 wins the queen for your rook and gives check. " +
                 "In your game you played e1 → e2, and d8 → d1 takes your rook and gives check.",
             DrillCoach.mistakeRecap(
                 fen = "3qk3/8/8/8/8/8/8/3RK3 w - - 0 1",
@@ -193,6 +193,40 @@ class DrillCoachTest {
                 mistakeThemes = setOf(ThemeTag.ENDGAME),
                 punishLan = null
             )
+        )
+    }
+
+    @Test
+    fun `mistake recap names the tactic the game move allowed`() {
+        // h2-h3 lets the a8 rook take the loose a1 rook
+        assertEquals(
+            "a1 → a8 wins the undefended rook and gives check. In your game you played " +
+                "h2 → h3, which allowed a tactic that wins material: a8 → a1 wins your " +
+                "undefended rook and gives check.",
+            DrillCoach.mistakeRecap(
+                fen = "r3k3/8/8/8/8/8/7P/R3K3 w - - 0 1",
+                bestLan = "a1a8",
+                playedLan = "h2h3",
+                mistakeThemes = setOf(ThemeTag.ALLOWED_TACTIC, ThemeTag.ENDGAME),
+                punishLan = "a8a1"
+            )
+        )
+    }
+
+    @Test
+    fun `mistake recap keeps the mate threat clause instead of describing the reply`() {
+        // Fool's mate: g2-g4 allows Qh4#
+        val recap = DrillCoach.mistakeRecap(
+            fen = "rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2",
+            bestLan = "e2e4",
+            playedLan = "g2g4",
+            mistakeThemes = setOf(ThemeTag.ALLOWED_MATE, ThemeTag.OPENING),
+            punishLan = "d8h4"
+        )
+        assertEquals(
+            "In your game you played g2 → g4, which gave the opponent a forced mate " +
+                "(d8 → h4 was the threat).",
+            recap
         )
     }
 }
