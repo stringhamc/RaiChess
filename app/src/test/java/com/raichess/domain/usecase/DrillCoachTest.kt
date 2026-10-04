@@ -3,6 +3,7 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.ThemeTag
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -148,5 +149,50 @@ class DrillCoachTest {
             // Every first-miss line still escalates on repeat misses
             assertTrue(DrillCoach.tryAgain(1, persona) != DrillCoach.tryAgain(2, persona))
         }
+    }
+
+    @Test
+    fun `mistake recap explains the hung piece by the capture that won it`() {
+        // Ng3-e4 drops the knight to the d5 pawn; Ke2 has nothing to explain
+        assertEquals(
+            "In your game you played g3 → e4, which left a piece where it could be " +
+                "taken for free: d5 → e4 wins your undefended knight.",
+            DrillCoach.mistakeRecap(
+                fen = "4k3/8/8/3p4/8/6N1/8/4K3 w - - 0 1",
+                bestLan = "e1e2",
+                playedLan = "g3e4",
+                mistakeThemes = setOf(ThemeTag.HANGING_PIECE, ThemeTag.ENDGAME),
+                punishLan = "d5e4"
+            )
+        )
+    }
+
+    @Test
+    fun `mistake recap says why the best move works`() {
+        // Untagged blunder: the best move's reason, then the reply it ran into
+        assertEquals(
+            "d1 → d8 wins the queen and gives check. " +
+                "In your game you played e1 → e2, and d8 → d1 takes your rook and gives check.",
+            DrillCoach.mistakeRecap(
+                fen = "3qk3/8/8/8/8/8/8/3RK3 w - - 0 1",
+                bestLan = "d1d8",
+                playedLan = "e1e2",
+                mistakeThemes = setOf(ThemeTag.ENDGAME),
+                punishLan = "d8d1"
+            )
+        )
+    }
+
+    @Test
+    fun `mistake recap is null when there is nothing concrete to say`() {
+        assertNull(
+            DrillCoach.mistakeRecap(
+                fen = "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+                bestLan = "e1e2",
+                playedLan = "e1f2",
+                mistakeThemes = setOf(ThemeTag.ENDGAME),
+                punishLan = null
+            )
+        )
     }
 }

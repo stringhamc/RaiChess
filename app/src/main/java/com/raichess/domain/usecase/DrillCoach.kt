@@ -243,6 +243,45 @@ object DrillCoach {
             "Compare your candidate moves: for each one, what's the opponent's best reply?"
     }
 
+    /** Explanations whose lesson is the opponent's reply to the game move. */
+    private val REPLY_SHAPED = setOf(ThemeTag.ALLOWED_MATE, ThemeTag.HANGING_PIECE, ThemeTag.ALLOWED_TACTIC)
+        .mapNotNull { it.explanation }
+        .toSet()
+
+    /**
+     * The own-mistake lesson, both halves (field request: the recap named
+     * the game move's flaw but never said why the engine's move works, or
+     * what exactly the game move ran into):
+     *
+     *   "d5 → c5 gets your queen out of danger. In your game you played
+     *    d5 → a2, which left a piece where it could be taken for free:
+     *    a1 → a2 takes your queen."
+     *
+     * Either half drops out when there's nothing concrete to say; null
+     * when neither has anything. Persona-free — it's teaching, not chatter.
+     */
+    fun mistakeRecap(
+        fen: String,
+        bestLan: String,
+        playedLan: String,
+        mistakeThemes: Set<ThemeTag>,
+        punishLan: String?
+    ): String? {
+        val best = MoveExplainer.whyBest(fen, bestLan)
+        val played = LanFormat.arrow(playedLan)
+        val why = ThemeTag.explain(mistakeThemes)
+        val punished = punishLan?.let { MoveExplainer.whyPunished(fen, playedLan, it) }
+        val game = when {
+            why != null && why in REPLY_SHAPED && punished != null ->
+                "In your game you played $played, which $why: $punished."
+            why != null ->
+                "In your game you played $played, which $why${threatClause(mistakeThemes, punishLan)}."
+            punished != null -> "In your game you played $played, and $punished."
+            else -> null
+        }
+        return listOfNotNull(best, game).joinToString(" ").ifEmpty { null }
+    }
+
     /**
      * "(f3 → d4 was the threat)" — the concrete punishment named next to a
      * mistake explanation, or empty when it isn't tactic/mate/hanging

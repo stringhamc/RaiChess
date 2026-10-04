@@ -246,100 +246,16 @@ object MistakeNarrator {
         }
 
         private fun givesCheck(lan: String, moverIsWhite: Boolean): Boolean {
-            val position = applied(before, lan) ?: return false
-            val king = position.indexOfFirst { it == if (moverIsWhite) 'k' else 'K' }
-            return king >= 0 && squareAttacked(position, king, byWhite = moverIsWhite)
+            val position = BoardGeometry.applied(before, lan) ?: return false
+            return BoardGeometry.inCheck(position, byWhite = !moverIsWhite)
         }
 
         companion object {
             fun of(fenBefore: String, moveLan: String): Geometry? {
                 val before = HintAdvisor.parseFenBoard(fenBefore) ?: return null
                 val to = HintAdvisor.squareOrdinal(moveLan.drop(2).take(2)) ?: return null
-                val after = applied(before, moveLan) ?: return null
+                val after = BoardGeometry.applied(before, moveLan) ?: return null
                 return Geometry(before, after, pieceName(after[to]))
-            }
-
-            /**
-             * The board after a LAN move, or null when malformed. Trusts
-             * the move (it came from the engine or the game record) but
-             * handles the two moves whose side effects reach beyond
-             * from→to: en passant (a pawn capturing diagonally onto an
-             * empty square removes the bypassed pawn) and castling (the
-             * king's two-file slide brings the rook across).
-             */
-            private fun applied(board: List<Char?>, lan: String): List<Char?>? {
-                val from = HintAdvisor.squareOrdinal(lan.take(2)) ?: return null
-                val to = HintAdvisor.squareOrdinal(lan.drop(2).take(2)) ?: return null
-                val piece = board[from] ?: return null
-                val out = board.toMutableList()
-                if (piece.lowercaseChar() == 'p' && from % 8 != to % 8 && board[to] == null) {
-                    out[(from / 8) * 8 + (to % 8)] = null
-                }
-                if (piece.lowercaseChar() == 'k' && abs(from % 8 - to % 8) == 2) {
-                    val rank = (from / 8) * 8
-                    if (to % 8 == 6) {
-                        out[rank + 5] = out[rank + 7]
-                        out[rank + 7] = null
-                    } else {
-                        out[rank + 3] = out[rank + 0]
-                        out[rank + 0] = null
-                    }
-                }
-                val promotion = lan.getOrNull(4)
-                out[to] = when {
-                    promotion == null -> piece
-                    piece.isUpperCase() -> promotion.uppercaseChar()
-                    else -> promotion.lowercaseChar()
-                }
-                out[from] = null
-                return out
-            }
-
-            private val KNIGHT_JUMPS = listOf(
-                1 to 2, 2 to 1, 2 to -1, 1 to -2, -1 to -2, -2 to -1, -2 to 1, -1 to 2
-            )
-            private val ROOK_RAYS = listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)
-            private val BISHOP_RAYS = listOf(1 to 1, 1 to -1, -1 to 1, -1 to -1)
-
-            /** Is [square] attacked by the side [byWhite] on [board]? */
-            private fun squareAttacked(board: List<Char?>, square: Int, byWhite: Boolean): Boolean {
-                val file = square % 8
-                val rank = square / 8
-                fun at(f: Int, r: Int): Char? =
-                    if (f in 0..7 && r in 0..7) board[r * 8 + f] else null
-
-                fun attacker(c: Char) = if (byWhite) c.uppercaseChar() else c.lowercaseChar()
-
-                for ((df, dr) in KNIGHT_JUMPS) {
-                    if (at(file + df, rank + dr) == attacker('n')) return true
-                }
-                for ((df, dr) in ROOK_RAYS + BISHOP_RAYS) {
-                    if (at(file + df, rank + dr) == attacker('k')) return true
-                }
-                // Pawns attack one rank toward the enemy: a white attacker
-                // sits one rank below the target square
-                val pawnRank = if (byWhite) rank - 1 else rank + 1
-                if (at(file - 1, pawnRank) == attacker('p') ||
-                    at(file + 1, pawnRank) == attacker('p')
-                ) {
-                    return true
-                }
-                for ((rays, slider) in listOf(ROOK_RAYS to 'r', BISHOP_RAYS to 'b')) {
-                    for ((df, dr) in rays) {
-                        var f = file + df
-                        var r = rank + dr
-                        while (f in 0..7 && r in 0..7) {
-                            val piece = board[r * 8 + f]
-                            if (piece != null) {
-                                if (piece == attacker(slider) || piece == attacker('q')) return true
-                                break
-                            }
-                            f += df
-                            r += dr
-                        }
-                    }
-                }
-                return false
             }
 
             /**
