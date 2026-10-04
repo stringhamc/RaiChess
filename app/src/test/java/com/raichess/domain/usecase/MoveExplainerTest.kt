@@ -86,4 +86,14 @@ class MoveExplainerTest {
             MoveExplainer.whyPunished("r6k/8/8/8/3Q4/8/8/2KR4 w - - 0 1", "d4d8", "a8d8")
         )
     }
+
+    @Test
+    fun `a discovered check is not a fork`() {
+        // Nd4-c6 unmasks the d1 rook on the d6 king and hits the a7 rook:
+        // the knight itself never attacks the king
+        assertEquals(
+            "d4 → c6 attacks the rook on a7 and uncovers check.",
+            MoveExplainer.whyBest("8/r7/3k4/8/3N4/8/8/3RK3 w - - 0 1", "d4c6")
+        )
+    }
 }

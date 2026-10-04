@@ -100,8 +100,12 @@ object MoveExplainer {
                     BoardGeometry.value(after[s]!!) > BoardGeometry.value(landed)
             }
             .sortedByDescending { BoardGeometry.value(after[it]!!) }
+        // Only a check the moved piece gives itself joins a fork; a
+        // discovered check comes from another piece
+        val enemyKing = after.indexOfFirst { it == if (white) 'k' else 'K' }
+        val checksDirectly = check && enemyKing in BoardGeometry.attacksFrom(after, to)
         val forked = targets.map { "$enemyOwner ${name(after[it]!!)}" }
-            .let { if (check) listOf("$enemyOwner king") + it else it }
+            .let { if (checksDirectly) listOf("$enemyOwner king") + it else it }
         when {
             forked.size >= 2 -> {
                 val second = forked[1].removePrefix("$enemyOwner ")
@@ -112,8 +116,9 @@ object MoveExplainer {
                 facts.add(
                     "attacks $enemyOwner ${name(after[target]!!)} on ${BoardGeometry.squareName(target)}"
                 )
+                if (check && !checksDirectly) facts.add("uncovers check")
             }
-            check -> facts.add("gives check")
+            check -> facts.add(if (checksDirectly) "gives check" else "uncovers check")
         }
 
         if (defensive) {
