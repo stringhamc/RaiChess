@@ -81,30 +81,35 @@ object ThemeTagger {
 
         if ((nextAnalysis?.mateIn ?: 0) > 0) tags.add(ThemeTag.ALLOWED_MATE)
 
+        // The opponent's best reply, resolved on the post-move board
+        val reply = nextAnalysis?.bestMoveLan?.let { GameAnalyzer.lanToLegalMove(board, it) }
+
         // Single-ply exchange approximation, not a full SEE: hanging means
         // attacked while undefended, or attacked by something cheaper (a
         // defended knight attacked by a pawn is still lost material). Pinned
         // "defenders" are counted as defending even though they couldn't
         // legally recapture — a false *negative*, which is the direction
         // this tagger prefers to err in.
+        //
+        // The static check alone can't see compensation (field report: a
+        // queen "hung" to a rook, but taking it let a pawn promote and the
+        // engine rated the move winning), so the engine must agree: its
+        // best reply has to actually take the piece. A stronger reply
+        // elsewhere loses the tag — the same preferred false negative.
         val movedPieceValue = pieceValue(board.getPiece(played.to), playerSide)
         val attackers = board.squareAttackedBy(played.to, opponentSide)
-        val hanging = movedPieceValue > 0 && attackers != 0L && (
+        val staticallyHanging = movedPieceValue > 0 && attackers != 0L && (
             board.squareAttackedBy(played.to, playerSide) == 0L ||
                 minPieceValueOn(board, attackers) < movedPieceValue
             )
-        if (hanging) tags.add(ThemeTag.HANGING_PIECE)
+        if (staticallyHanging && reply?.to == played.to) tags.add(ThemeTag.HANGING_PIECE)
 
-        val replyLan = nextAnalysis?.bestMoveLan
-        if (replyLan != null) {
-            val reply = GameAnalyzer.lanToLegalMove(board, replyLan)
-            // A winning reply against the moved piece itself is the
-            // HANGING_PIECE case; ALLOWED_TACTIC is for damage elsewhere.
-            if (reply != null && reply.to != played.to &&
-                pieceValue(board.getPiece(reply.to), playerSide) >= SIGNIFICANT_MATERIAL_CP
-            ) {
-                tags.add(ThemeTag.ALLOWED_TACTIC)
-            }
+        // A winning reply against the moved piece itself is the
+        // HANGING_PIECE case; ALLOWED_TACTIC is for damage elsewhere.
+        if (reply != null && reply.to != played.to &&
+            pieceValue(board.getPiece(reply.to), playerSide) >= SIGNIFICANT_MATERIAL_CP
+        ) {
+            tags.add(ThemeTag.ALLOWED_TACTIC)
         }
 
         return tags

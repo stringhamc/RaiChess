@@ -101,6 +101,7 @@ class StockfishNativeEngine(
             val best = awaitToken(moveTimeMs + BESTMOVE_GRACE_MS) { it.startsWith("bestmove") }
             if (best == null) {
                 if (released) return null
+                abandonSearch()
                 Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
                 return fallbackMove(board, "no bestmove within ${moveTimeMs + BESTMOVE_GRACE_MS}ms")
             }
@@ -164,10 +165,14 @@ class StockfishNativeEngine(
                     }
                     line.startsWith("bestmove")
                 }
+                if (best == null) abandonSearch()
                 if (best == null || latest.isEmpty()) {
                     return listOfNotNull(analyze(board, moveTimeMs))
                 }
                 latest.entries.sortedBy { it.key }.mapNotNull { (_, info) ->
+                    if (!StockfishWasmEngine.isResultFor(board, best, info.pv)) {
+                        return@mapNotNull null
+                    }
                     val lan = info.pv.firstOrNull()?.lowercase() ?: return@mapNotNull null
                     PositionAnalysis(
                         scoreCp = info.scoreCp,
@@ -203,9 +208,14 @@ class StockfishNativeEngine(
         }
         if (best == null) {
             if (released) return null
+            abandonSearch()
             return fallbackAnalysis(board, moveTimeMs)
         }
         val info = lastInfo ?: return fallbackAnalysis(board, moveTimeMs)
+        if (!StockfishWasmEngine.isResultFor(board, best, info.pv)) {
+            Log.w(TAG, "search result doesn't fit the position; using fallback analyzer")
+            return fallbackAnalysis(board, moveTimeMs)
+        }
         val bestMoveLan = StockfishWasmEngine.parseUciBestMove(board, best)
             ?.toString()?.lowercase()
         return PositionAnalysis(
@@ -297,6 +307,29 @@ class StockfishNativeEngine(
             }
         )
         return true
+    }
+
+    /**
+     * A search outlived its deadline. Stop it and swallow its late
+     * `bestmove` now, so it can't answer the next search; a process that
+     * won't even acknowledge `stop` is restarted on the next call instead.
+     */
+    private fun abandonSearch() {
+        // A dead engine can't take the command; restart it the same way
+        if (runCatching { send("stop") }.isFailure) return restart()
+        if (awaitToken(STOP_GRACE_MS) { it.startsWith("bestmove") } != null) return
+        restart()
+    }
+
+    @Synchronized
+    private fun restart() {
+        if (released) return
+        EngineDiagnostics.record(appContext, "native stockfish unresponsive after stop; restarting")
+        state = State.UNINITIALIZED
+        // Same generation bump as fail(): the old reader must not write
+        // into the queue the next attempt owns
+        attemptGeneration++
+        destroyProcess()
     }
 
     /** Pump engine stdout into the shared queue, generation-scoped. */
@@ -403,6 +436,8 @@ class StockfishNativeEngine(
         private const val HANDSHAKE_TIMEOUT_MS = 5000L
         private const val BESTMOVE_GRACE_MS = 4000L
         private const val POLL_SLICE_MS = 200L
+        // How long a stopped search gets to print its bestmove
+        private const val STOP_GRACE_MS = 2000L
         private const val MAX_INIT_ATTEMPTS = 2
     }
 }

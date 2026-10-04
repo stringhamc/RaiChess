@@ -170,4 +170,34 @@ class ThemeTaggerTest {
         assertFalse(ThemeTag.OPENING in middlegame)
         assertFalse(ThemeTag.ENDGAME in middlegame)
     }
+
+    @Test
+    fun `statically hanging piece the engine won't take is NOT hanging`() {
+        // Field report: ...Qd5-a2 "left a piece where it could be taken for
+        // free" — Ra1 attacks the undefended queen, but Rxa2 lets ...c2
+        // promote, and the engine's best reply is f2-f4, not the capture
+        val tags = ThemeTagger.tag(
+            fenBefore = "1r5r/p1p1k1pp/2n1bp2/3qP3/Q2P2P1/P1pP3P/4PP1N/RN2KBR1 b - - 0 25",
+            ply = 49,
+            moveLan = "d5a2",
+            analysis = cp(-100, "d5c5"),
+            nextAnalysis = cp(250, "f2f4"),
+            lossCp = 350
+        )
+        assertFalse(ThemeTag.HANGING_PIECE in tags)
+    }
+
+    @Test
+    fun `statically hanging piece the engine does take IS hanging`() {
+        // Same position, but the engine's reply really is the capture
+        val tags = ThemeTagger.tag(
+            fenBefore = "1r5r/p1p1k1pp/2n1bp2/3qP3/Q2P2P1/P1pP3P/4PP1N/RN2KBR1 b - - 0 25",
+            ply = 49,
+            moveLan = "d5a2",
+            analysis = cp(-100, "d5c5"),
+            nextAnalysis = cp(600, "a1a2"),
+            lossCp = 700
+        )
+        assertTrue(ThemeTag.HANGING_PIECE in tags)
+    }
 }

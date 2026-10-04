@@ -245,13 +245,20 @@ object DrillCoach {
 
     /**
      * "(f3 → d4 was the threat)" — the concrete punishment named next to a
-     * mistake explanation, or empty when it isn't tactic/mate shaped or
-     * wasn't recorded. Appended by prompts that quote [ThemeTag.explain].
+     * mistake explanation, or empty when it isn't tactic/mate/hanging
+     * shaped or wasn't recorded (field report: "left a piece where it
+     * could be taken for free" without saying by what didn't help).
+     * Appended by prompts that quote [ThemeTag.explain].
      */
     fun threatClause(mistakeThemes: Set<ThemeTag>, punishLan: String?): String {
         if (punishLan == null) return ""
-        val threatShaped = ThemeTag.ALLOWED_TACTIC in mistakeThemes ||
-            ThemeTag.ALLOWED_MATE in mistakeThemes
-        return if (threatShaped) " (${LanFormat.arrow(punishLan)} was the threat)" else ""
+        val move = LanFormat.arrow(punishLan)
+        return when {
+            ThemeTag.ALLOWED_TACTIC in mistakeThemes ||
+                ThemeTag.ALLOWED_MATE in mistakeThemes -> " ($move was the threat)"
+            // Tagged only when the engine's reply takes the moved piece
+            ThemeTag.HANGING_PIECE in mistakeThemes -> " ($move takes it)"
+            else -> ""
+        }
     }
 }

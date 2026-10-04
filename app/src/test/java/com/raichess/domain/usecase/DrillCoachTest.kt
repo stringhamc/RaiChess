@@ -95,6 +95,11 @@ class DrillCoachTest {
         assertEquals("", DrillCoach.threatClause(setOf(ThemeTag.ALLOWED_TACTIC), null))
         // A missed capture has no incoming threat to name
         assertEquals("", DrillCoach.threatClause(setOf(ThemeTag.MISSED_CAPTURE), "f3d4"))
+        // A hung piece names the capture that wins it
+        assertEquals(
+            " (a1 → a2 takes it)",
+            DrillCoach.threatClause(setOf(ThemeTag.HANGING_PIECE), "a1a2")
+        )
     }
 
     @Test
