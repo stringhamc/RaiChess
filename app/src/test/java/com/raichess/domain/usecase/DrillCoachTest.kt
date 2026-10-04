@@ -3,6 +3,7 @@ package com.raichess.domain.usecase
 import com.raichess.domain.model.CoachPersonality
 import com.raichess.domain.model.ThemeTag
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -95,6 +96,11 @@ class DrillCoachTest {
         assertEquals("", DrillCoach.threatClause(setOf(ThemeTag.ALLOWED_TACTIC), null))
         // A missed capture has no incoming threat to name
         assertEquals("", DrillCoach.threatClause(setOf(ThemeTag.MISSED_CAPTURE), "f3d4"))
+        // A hung piece names the capture that wins it
+        assertEquals(
+            " (a1 → a2 takes it)",
+            DrillCoach.threatClause(setOf(ThemeTag.HANGING_PIECE), "a1a2")
+        )
     }
 
     @Test
@@ -143,5 +149,100 @@ class DrillCoachTest {
             // Every first-miss line still escalates on repeat misses
             assertTrue(DrillCoach.tryAgain(1, persona) != DrillCoach.tryAgain(2, persona))
         }
+    }
+
+    @Test
+    fun `mistake recap explains the hung piece by the capture that won it`() {
+        // Ng3-e4 drops the knight to the d5 pawn; Ke2 has nothing to explain
+        assertEquals(
+            "In your game you played g3 → e4, which left a piece where it could be " +
+                "taken for free: d5 → e4 wins your undefended knight.",
+            DrillCoach.mistakeRecap(
+                fen = "4k3/8/8/3p4/8/6N1/8/4K3 w - - 0 1",
+                bestLan = "e1e2",
+                playedLan = "g3e4",
+                mistakeThemes = setOf(ThemeTag.HANGING_PIECE, ThemeTag.ENDGAME),
+                punishLan = "d5e4"
+            )
+        )
+    }
+
+    @Test
+    fun `mistake recap says why the best move works`() {
+        // Untagged blunder: the best move's reason, then the reply it ran into
+        assertEquals(
+            "d1 → d8 wins the queen for your rook and gives check. " +
+                "In your game you played e1 → e2, and d8 → d1 takes your rook and gives check.",
+            DrillCoach.mistakeRecap(
+                fen = "3qk3/8/8/8/8/8/8/3RK3 w - - 0 1",
+                bestLan = "d1d8",
+                playedLan = "e1e2",
+                mistakeThemes = setOf(ThemeTag.ENDGAME),
+                punishLan = "d8d1"
+            )
+        )
+    }
+
+    @Test
+    fun `mistake recap is null when there is nothing concrete to say`() {
+        assertNull(
+            DrillCoach.mistakeRecap(
+                fen = "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+                bestLan = "e1e2",
+                playedLan = "e1f2",
+                mistakeThemes = setOf(ThemeTag.ENDGAME),
+                punishLan = null
+            )
+        )
+    }
+
+    @Test
+    fun `mistake recap names the tactic the game move allowed`() {
+        // h2-h3 lets the a8 rook take the loose a1 rook
+        assertEquals(
+            "a1 → a8 wins the undefended rook and gives check. In your game you played " +
+                "h2 → h3, which allowed a tactic that wins material: a8 → a1 wins your " +
+                "undefended rook and gives check.",
+            DrillCoach.mistakeRecap(
+                fen = "r3k3/8/8/8/8/8/7P/R3K3 w - - 0 1",
+                bestLan = "a1a8",
+                playedLan = "h2h3",
+                mistakeThemes = setOf(ThemeTag.ALLOWED_TACTIC, ThemeTag.ENDGAME),
+                punishLan = "a8a1"
+            )
+        )
+    }
+
+    @Test
+    fun `mistake recap keeps the mate threat clause instead of describing the reply`() {
+        // Fool's mate: g2-g4 allows Qh4#
+        val recap = DrillCoach.mistakeRecap(
+            fen = "rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2",
+            bestLan = "e2e4",
+            playedLan = "g2g4",
+            mistakeThemes = setOf(ThemeTag.ALLOWED_MATE, ThemeTag.OPENING),
+            punishLan = "d8h4"
+        )
+        assertEquals(
+            "In your game you played g2 → g4, which gave the opponent a forced mate " +
+                "(d8 → h4 was the threat).",
+            recap
+        )
+    }
+
+    @Test
+    fun `field report recap makes no hung-queen claim when the engine declines the capture`() {
+        // ...Qa2 isn't tagged once the engine's reply (f2-f4) doesn't take
+        // the queen, and that quiet reply has nothing to describe
+        assertEquals(
+            "d5 → a2 attacks the rook on a1.",
+            DrillCoach.mistakeRecap(
+                fen = "1r5r/p1p1k1pp/2n1bp2/3qP3/Q2P2P1/P1pP3P/4PP1N/RN2KBR1 b - - 0 25",
+                bestLan = "d5a2",
+                playedLan = "c6d4",
+                mistakeThemes = setOf(ThemeTag.MIDDLEGAME),
+                punishLan = "f2f4"
+            )
+        )
     }
 }

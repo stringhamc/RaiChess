@@ -244,14 +244,65 @@ object DrillCoach {
     }
 
     /**
+     * Explanations whose lesson is the opponent's reply to the game move.
+     * Not ALLOWED_MATE: the reply only starts the mate, so describing it
+     * ("takes your rook") would bury the point; that one keeps
+     * [threatClause]'s "(x was the threat)".
+     */
+    private val REPLY_SHAPED = setOf(ThemeTag.HANGING_PIECE, ThemeTag.ALLOWED_TACTIC)
+        .mapNotNull { it.explanation }
+        .toSet()
+
+    /**
+     * The own-mistake lesson, both halves (field request: the recap named
+     * the game move's flaw but never said why the engine's move works, or
+     * what exactly the game move ran into):
+     *
+     *   "a1 → a8 wins the undefended rook and gives check. In your game
+     *    you played h2 → h3, which allowed a tactic that wins material:
+     *    a8 → a1 wins your undefended rook and gives check."
+     *
+     * Either half drops out when there's nothing concrete to say; null
+     * when neither has anything. Persona-free — it's teaching, not chatter.
+     */
+    fun mistakeRecap(
+        fen: String,
+        bestLan: String,
+        playedLan: String,
+        mistakeThemes: Set<ThemeTag>,
+        punishLan: String?
+    ): String? {
+        val best = MoveExplainer.whyBest(fen, bestLan)
+        val played = LanFormat.arrow(playedLan)
+        val why = ThemeTag.explain(mistakeThemes)
+        val punished = punishLan?.let { MoveExplainer.whyPunished(fen, playedLan, it) }
+        val game = when {
+            why != null && why in REPLY_SHAPED && punished != null ->
+                "In your game you played $played, which $why: $punished."
+            why != null ->
+                "In your game you played $played, which $why${threatClause(mistakeThemes, punishLan)}."
+            punished != null -> "In your game you played $played, and $punished."
+            else -> null
+        }
+        return listOfNotNull(best, game).joinToString(" ").ifEmpty { null }
+    }
+
+    /**
      * "(f3 → d4 was the threat)" — the concrete punishment named next to a
-     * mistake explanation, or empty when it isn't tactic/mate shaped or
-     * wasn't recorded. Appended by prompts that quote [ThemeTag.explain].
+     * mistake explanation, or empty when it isn't tactic/mate/hanging
+     * shaped or wasn't recorded (field report: "left a piece where it
+     * could be taken for free" without saying by what didn't help).
+     * Appended by prompts that quote [ThemeTag.explain].
      */
     fun threatClause(mistakeThemes: Set<ThemeTag>, punishLan: String?): String {
         if (punishLan == null) return ""
-        val threatShaped = ThemeTag.ALLOWED_TACTIC in mistakeThemes ||
-            ThemeTag.ALLOWED_MATE in mistakeThemes
-        return if (threatShaped) " (${LanFormat.arrow(punishLan)} was the threat)" else ""
+        val move = LanFormat.arrow(punishLan)
+        return when {
+            ThemeTag.ALLOWED_TACTIC in mistakeThemes ||
+                ThemeTag.ALLOWED_MATE in mistakeThemes -> " ($move was the threat)"
+            // Tagged only when the engine's reply takes the moved piece
+            ThemeTag.HANGING_PIECE in mistakeThemes -> " ($move takes it)"
+            else -> ""
+        }
     }
 }

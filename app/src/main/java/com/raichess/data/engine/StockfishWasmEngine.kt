@@ -136,6 +136,7 @@ class StockfishWasmEngine(
                 // means the game is being torn down — skip the wasted fallback
                 // search against a board the ViewModel has likely replaced.
                 if (released) return null
+                abandonSearch()
                 Log.w(TAG, "no bestmove within timeout; using RaiEngine fallback")
                 return fallbackMove(board, "no bestmove within ${moveTimeMs + BESTMOVE_GRACE_MS}ms")
             }
@@ -208,11 +209,16 @@ class StockfishWasmEngine(
         }
         if (best == null) {
             if (released) return null
+            abandonSearch()
             Log.w(TAG, "no bestmove within analysis timeout; using fallback analyzer")
             return fallbackAnalysis(board, moveTimeMs)
         }
 
         val info = lastInfo ?: return fallbackAnalysis(board, moveTimeMs)
+        if (!isResultFor(board, best, info.pv)) {
+            Log.w(TAG, "search result doesn't fit the position; using fallback analyzer")
+            return fallbackAnalysis(board, moveTimeMs)
+        }
         // Re-validate the engine's move against the real legal set, as
         // selectMove does; "bestmove (none)" (mate/stalemate) → null.
         val bestMoveLan = parseUciBestMove(board, best)?.toString()?.lowercase()
@@ -318,6 +324,29 @@ class StockfishWasmEngine(
             }
         )
         return true
+    }
+
+    /**
+     * A search outlived its deadline. Stop it and swallow its late
+     * `bestmove` now, so it can't answer the next search; an engine that
+     * won't even acknowledge `stop` is restarted on the next call instead.
+     */
+    private fun abandonSearch() {
+        // A dead engine can't take the command; restart it the same way
+        if (runCatching { send("stop") }.isFailure) return restart()
+        if (awaitToken(STOP_GRACE_MS) { it.startsWith("bestmove") } != null) return
+        restart()
+    }
+
+    @Synchronized
+    private fun restart() {
+        if (released) return
+        EngineDiagnostics.record(appContext, "stockfish unresponsive after stop; restarting")
+        state = State.UNINITIALIZED
+        // Same generation bump as fail(): the abandoned WebView's late
+        // callbacks must not reach the queue the next attempt owns
+        attemptGeneration++
+        destroyWebView()
     }
 
     private fun handshake(): Boolean {
@@ -505,6 +534,28 @@ class StockfishWasmEngine(
                 .firstOrNull { it.toString().lowercase() == lan }
         }
 
+        /**
+         * True when a finished search's `bestmove` line and PV belong to
+         * [board]. A search abandoned at its deadline can still print its
+         * result later, into the next search's output (field report: a
+         * drill demanded a move that hung the queen); that move or line is
+         * almost never legal from the new position, so replaying it here
+         * catches the leak. "bestmove (none)" (no legal moves) passes.
+         */
+        fun isResultFor(board: Board, bestmoveLine: String, pv: List<String>): Boolean {
+            val lan = bestmoveLine.split(" ").getOrNull(1)?.lowercase() ?: return false
+            if (lan == "(none)") return true
+            if (parseUciBestMove(board, bestmoveLine) == null) return false
+            val replay = Board().apply { loadFromFen(board.fen) }
+            for (moveLan in pv) {
+                val move = MoveGenerator.generateLegalMoves(replay)
+                    .firstOrNull { it.toString().lowercase() == moveLan.lowercase() }
+                    ?: return false
+                replay.doMove(move)
+            }
+            return true
+        }
+
         private const val TAG = "StockfishWasmEngine"
         /** Stockfish's Skill Level ceiling — full strength. */
         private const val MAX_SKILL_LEVEL = 20
@@ -526,6 +577,8 @@ class StockfishWasmEngine(
         // Post-handshake readiness (`isready`/`readyok`) round-trips once
         // the engine is genuinely up: fast.
         private const val HANDSHAKE_TIMEOUT_MS = 5000L
+        // How long a stopped search gets to print its bestmove
+        private const val STOP_GRACE_MS = 2000L
         // The isready AFTER the option batch can sit behind the whole WASM
         // compile on builds whose wrapper acks the handshake from a pre-init
         // queue (observed in the field via EngineDiagnostics) — budget it

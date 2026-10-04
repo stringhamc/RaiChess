@@ -18,9 +18,7 @@ import com.raichess.data.repository.PlayerProfileRepository
 import com.raichess.data.repository.PracticeRepository
 import com.raichess.data.repository.PuzzleRepository
 import com.raichess.data.repository.SettingsRepository
-import com.raichess.domain.model.LanFormat
 import com.raichess.domain.model.PracticeRating
-import com.raichess.domain.model.ThemeTag
 import com.raichess.domain.usecase.DrillCoach
 import com.raichess.domain.usecase.DrillSelector
 import com.raichess.domain.usecase.LessonPlanner
@@ -624,10 +622,17 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
             prompt = when {
                 lessonDoneTitle != null -> "Tap Next for your next lesson."
                 walkedThrough -> walkedPrompt()
-                solved && solvedNote != null -> solvedNote
-                solved && (missCount > 0 || assist != DrillCoach.Assist.NONE) ->
-                    DrillCoach.solvedEarned(persona)
-                solved -> DrillCoach.solvedClean(streak, persona)
+                // A solved own-mistake drill still teaches: why the move
+                // works and what the game move ran into
+                solved -> listOfNotNull(
+                    when {
+                        solvedNote != null -> solvedNote
+                        missCount > 0 || assist != DrillCoach.Assist.NONE ->
+                            DrillCoach.solvedEarned(persona)
+                        else -> DrillCoach.solvedClean(streak, persona)
+                    },
+                    mistakeRecap()
+                ).joinToString(" ")
                 else -> DrillCoach.failed(persona)
             },
             lessonJustCompletedTitle = lessonDoneTitle,
@@ -665,25 +670,24 @@ class PracticeViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Walked-through recap: the line is complete on the board, so the
-     * lesson is context, not the answer. Own-mistake drills name WHICH
-     * move the original game mistake was, why it was one, and — when the
-     * analyzer recorded it — the concrete tactic it allowed (field
-     * request: "allowed a tactic that wins material" without naming the
-     * tactic read as an arbitrary claim). Spaced repetition will bring
-     * the position back, so a walkthrough is part of the loop, not an
-     * ending.
+     * lesson is context, not the answer. Own-mistake drills say why the
+     * engine's move works, then which move the original game mistake was,
+     * why it was one, and what it ran into (field requests: "allowed a
+     * tactic" without naming it, or a revealed move with no reason, read
+     * as arbitrary). Spaced repetition will bring the position back, so a
+     * walkthrough is part of the loop, not an ending.
      */
     private fun walkedPrompt(): String {
-        val mistake = activeMistake
-        val why = mistake?.let { ThemeTag.explain(it.themes) }
-        return if (mistake != null && why != null) {
-            val threat = DrillCoach.threatClause(mistake.themes, mistake.punishLan)
-            "${DrillCoach.walkthroughOpener(persona)} In your game you played " +
-                "${LanFormat.arrow(mistake.playedLan)}, which $why$threat. " +
-                DrillCoach.walkthroughCloser(persona)
+        val recap = mistakeRecap()
+        return if (recap != null) {
+            "${DrillCoach.walkthroughOpener(persona)} $recap ${DrillCoach.walkthroughCloser(persona)}"
         } else {
             DrillCoach.lineComplete(persona)
         }
+    }
+
+    private fun mistakeRecap(): String? = activeMistake?.let {
+        DrillCoach.mistakeRecap(it.fen, it.bestMoveLan, it.playedLan, it.themes, it.punishLan)
     }
 
     private fun promptFor(side: Side) = "Find the best move for ${sideName(side)}"

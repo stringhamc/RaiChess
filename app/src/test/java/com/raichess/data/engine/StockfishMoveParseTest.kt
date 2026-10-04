@@ -2,7 +2,9 @@ package com.raichess.data.engine
 
 import com.github.bhlangonijr.chesslib.Board
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -43,5 +45,29 @@ class StockfishMoveParseTest {
         assertNull(StockfishWasmEngine.parseUciBestMove(board, "bestmove zz"))
         // e2e5 is not a legal first move
         assertNull(StockfishWasmEngine.parseUciBestMove(board, "bestmove e2e5"))
+    }
+
+    @Test
+    fun `a result whose line replays here belongs to this position`() {
+        assertTrue(
+            StockfishWasmEngine.isResultFor(
+                Board(), "bestmove e2e4 ponder e7e5", listOf("e2e4", "e7e5", "g1f3")
+            )
+        )
+        assertTrue(StockfishWasmEngine.isResultFor(Board(), "bestmove (none)", emptyList()))
+    }
+
+    @Test
+    fun `a late result from another position's search is rejected`() {
+        // The previous search was for Black after 1.e4: its move is
+        // illegal here, and so is a PV that only fits that position
+        assertFalse(StockfishWasmEngine.isResultFor(Board(), "bestmove e7e5", listOf("e7e5")))
+        val board = Board().apply {
+            loadFromFen("1r5r/p1p1k1pp/2n1bp2/3qP3/Q2P2P1/P1pP3P/4PP1N/RN2KBR1 b - - 0 25")
+        }
+        // d5c5 is legal, but White has no piece on e7 to continue the line
+        assertFalse(
+            StockfishWasmEngine.isResultFor(board, "bestmove d5c5", listOf("d5c5", "e7e5"))
+        )
     }
 }

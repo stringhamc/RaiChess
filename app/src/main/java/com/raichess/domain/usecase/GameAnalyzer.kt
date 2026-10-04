@@ -189,8 +189,11 @@ class GameAnalyzer(
          * v3: hybrid cp + win-probability-drop classification — stored
          * grades change, so history re-analyzes to match.
          * v4: acceptable-alternative mining (MultiPV) for graded mistakes.
+         * v5: hanging-piece tags need the engine's reply to take the piece,
+         * and engine results from a stale search are rejected — old rows
+         * could carry a bogus answer key or explanation.
          */
-        const val VERSION = 4
+        const val VERSION = 5
 
         /** Deeper than the per-ply sweep: only graded mistakes pay this. */
         const val ALTERNATIVES_MOVE_TIME_MS = 400L
